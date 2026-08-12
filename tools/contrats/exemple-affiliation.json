@@ -1,0 +1,38 @@
+{
+  "dossierAffiliation": {
+    "reference": "AFF-10020",
+    "meta": {
+      "numeroCommercant": "10020",
+      "numeroPointDeVente": "ECM-01",
+      "contractDate": "08/04/2026"
+    },
+    "commercant": {
+      "raisonSociale": "Boutique Atlas SARL",
+      "nomCommercial": "Atlas Store",
+      "formeJuridique": "SARL",
+      "secteur": "E-commerce",
+      "mcc": "5399",
+      "adresse": "45 Boulevard Anfa",
+      "ville": "Casablanca",
+      "ice": "001234567000045",
+      "registreCommerce": "RC 458796",
+      "representantLegal": "Salma Idrissi",
+      "telephone": "+212661112233",
+      "telephoneSecondaire": "+212522112233",
+      "emailContact": "finance@atlas-store.ma"
+    },
+    "services": {
+      "modeServiceEcommerce": "SiteMarchand",
+      "siteMarchandUrl": "https://atlas-store.ma",
+      "applicationMobile": ""
+    },
+    "tarification": {
+      "commissionLocale": "1.20 %",
+      "commissionEtrangere": "2.80 %",
+      "fraisMiseEnService": "1 200 MAD"
+    },
+    "compteBancaire": {
+      "rib": "007780001234567890123456789"
+    }
+  }
+}

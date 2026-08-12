@@ -1,0 +1,489 @@
+{
+  "generatedAt": "2026-04-08T15:41:23.533Z",
+  "warnings": {
+    "missingRequiredFields": []
+  },
+  "fields": [
+    {
+      "token": "merchantNumber",
+      "contractField": "N° commerçant",
+      "required": false,
+      "sources": [
+        "dossierAffiliation.meta.numeroCommercant",
+        "dossierAffiliation.commercant.numeroCommercant",
+        "dossierAffiliation.commercant.idCommercant",
+        "dossierAffiliation.reference",
+        "reference"
+      ]
+    },
+    {
+      "token": "pointOfSaleReference",
+      "contractField": "N° Point de Vente",
+      "required": false,
+      "sources": [
+        "dossierAffiliation.meta.numeroPointDeVente",
+        "dossierAffiliation.commercant.pointOfSaleReference",
+        "dossierAffiliation.commercant.chainePointVente",
+        "dossierAffiliation.commercant.nombrePointsVente"
+      ]
+    },
+    {
+      "token": "mcc",
+      "contractField": "MCC",
+      "required": false,
+      "sources": [
+        "dossierAffiliation.commercant.mcc",
+        "dossierAffiliation.mcc",
+        "mcc"
+      ]
+    },
+    {
+      "token": "raisonSociale",
+      "contractField": "Raison sociale",
+      "required": true,
+      "sources": [
+        "dossierAffiliation.commercant.raisonSociale",
+        "dossierAffiliation.commercant.nomCommercial",
+        "dossierAffiliation.commercant.nomEntite",
+        "dossierAffiliation.raisonSociale"
+      ]
+    },
+    {
+      "token": "formeJuridique",
+      "contractField": "Forme juridique",
+      "required": false,
+      "sources": [
+        "dossierAffiliation.commercant.formeJuridique",
+        "dossierAffiliation.formeJuridique"
+      ]
+    },
+    {
+      "token": "secteurActivite",
+      "contractField": "Secteur d'activité",
+      "required": false,
+      "sources": [
+        "dossierAffiliation.commercant.secteur",
+        "dossierAffiliation.commercant.activite",
+        "dossierAffiliation.secteur",
+        "dossierAffiliation.activite"
+      ]
+    },
+    {
+      "token": "enseigne",
+      "contractField": "Enseigne / Acronyme",
+      "required": false,
+      "sources": [
+        "dossierAffiliation.commercant.enseigne",
+        "dossierAffiliation.commercant.nomCommercial",
+        "dossierAffiliation.enseigne"
+      ]
+    },
+    {
+      "token": "adresse",
+      "contractField": "Adresse",
+      "required": true,
+      "sources": [
+        "dossierAffiliation.commercant.adresse",
+        "dossierAffiliation.adresse"
+      ]
+    },
+    {
+      "token": "quartier",
+      "contractField": "Quartier",
+      "required": false,
+      "sources": [
+        "dossierAffiliation.commercant.quartier",
+        "dossierAffiliation.commercant.adresseComplement",
+        "dossierAffiliation.quartier"
+      ]
+    },
+    {
+      "token": "codePostal",
+      "contractField": "Code Postal",
+      "required": false,
+      "sources": [
+        "dossierAffiliation.commercant.codePostal",
+        "dossierAffiliation.codePostal"
+      ]
+    },
+    {
+      "token": "ville",
+      "contractField": "Ville",
+      "required": true,
+      "sources": [
+        "dossierAffiliation.commercant.ville",
+        "dossierAffiliation.ville"
+      ]
+    },
+    {
+      "token": "ice",
+      "contractField": "ICE",
+      "required": false,
+      "sources": [
+        "dossierAffiliation.commercant.ice",
+        "dossierAffiliation.commercant.identifiantFiscal",
+        "dossierAffiliation.ice"
+      ]
+    },
+    {
+      "token": "rc",
+      "contractField": "Registre de Commerce",
+      "required": false,
+      "sources": [
+        "dossierAffiliation.commercant.rc",
+        "dossierAffiliation.commercant.registreCommerce",
+        "dossierAffiliation.rc"
+      ]
+    },
+    {
+      "token": "patente",
+      "contractField": "Taxe Professionnelle (Patente)",
+      "required": false,
+      "sources": [
+        "dossierAffiliation.commercant.patente",
+        "dossierAffiliation.commercant.taxeProfessionnelle",
+        "dossierAffiliation.patente"
+      ]
+    },
+    {
+      "token": "representantLegal",
+      "contractField": "Nom du représentant légal",
+      "required": false,
+      "sources": [
+        "dossierAffiliation.commercant.representantLegal",
+        "dossierAffiliation.representantLegal"
+      ]
+    },
+    {
+      "token": "fonction",
+      "contractField": "Fonction",
+      "required": false,
+      "sources": [
+        "dossierAffiliation.commercant.fonction",
+        "dossierAffiliation.commercant.qualiteSignataire",
+        "dossierAffiliation.fonction"
+      ]
+    },
+    {
+      "token": "telephoneFixe",
+      "contractField": "Téléphone Fixe",
+      "required": false,
+      "sources": [
+        "dossierAffiliation.commercant.telephoneFixe",
+        "dossierAffiliation.commercant.telephoneSecondaire",
+        "dossierAffiliation.telephoneFixe",
+        "dossierAffiliation.telephoneSecondaire"
+      ]
+    },
+    {
+      "token": "gsm",
+      "contractField": "GSM",
+      "required": true,
+      "sources": [
+        "dossierAffiliation.commercant.telephone",
+        "dossierAffiliation.commercant.telephonePrincipal",
+        "dossierAffiliation.telephone",
+        "dossierAffiliation.telephonePrincipal",
+        "dossierAffiliation.commercant.telephoneSecondaire"
+      ]
+    },
+    {
+      "token": "emailReleve",
+      "contractField": "E-mail d'envoi du relevé",
+      "required": true,
+      "sources": [
+        "dossierAffiliation.commercant.emailReleve",
+        "dossierAffiliation.commercant.email",
+        "dossierAffiliation.commercant.emailContact",
+        "dossierAffiliation.email",
+        "dossierAffiliation.emailContact"
+      ]
+    },
+    {
+      "token": "beneficiairesEffectifs",
+      "contractField": "Nom(s) Bénéficiaire(s) Effectif(s)",
+      "required": false,
+      "sources": [
+        "dossierAffiliation.commercant.beneficiairesEffectifs",
+        "dossierAffiliation.beneficiairesEffectifs"
+      ]
+    },
+    {
+      "token": "cin",
+      "contractField": "CIN",
+      "required": false,
+      "sources": [
+        "dossierAffiliation.commercant.cin",
+        "dossierAffiliation.cin"
+      ]
+    },
+    {
+      "token": "dateNaissance",
+      "contractField": "Date de naissance",
+      "required": false,
+      "sources": [
+        "dossierAffiliation.commercant.dateNaissance",
+        "dossierAffiliation.dateNaissance"
+      ]
+    },
+    {
+      "token": "nationalite",
+      "contractField": "Nationalité",
+      "required": false,
+      "sources": [
+        "dossierAffiliation.commercant.nationalite",
+        "dossierAffiliation.nationalite"
+      ]
+    },
+    {
+      "token": "siteMarchandUrl",
+      "contractField": "URL du site marchand",
+      "required": false,
+      "sources": [
+        "dossierAffiliation.services.urlSite",
+        "dossierAffiliation.services.siteMarchandUrl",
+        "dossierAffiliation.siteMarchandUrl"
+      ]
+    },
+    {
+      "token": "applicationMobile",
+      "contractField": "Nom de l'application mobile",
+      "required": false,
+      "sources": [
+        "dossierAffiliation.services.nomApp",
+        "dossierAffiliation.services.applicationMobile",
+        "dossierAffiliation.applicationMobile"
+      ]
+    },
+    {
+      "token": "commissionLocaleEcommerce",
+      "contractField": "Taux commission locale",
+      "required": false,
+      "sources": [
+        "dossierAffiliation.tarification.commissionLocale",
+        "dossierAffiliation.tarification.commissionLocaleEcommerce",
+        "dossierAffiliation.commissionLocaleEcommerce",
+        "dossierAffiliation.commissionLocale"
+      ]
+    },
+    {
+      "token": "commissionEtrangereEcommerce",
+      "contractField": "Taux commission étrangère",
+      "required": false,
+      "sources": [
+        "dossierAffiliation.tarification.commissionEtrangere",
+        "dossierAffiliation.tarification.commissionEtrangereEcommerce",
+        "dossierAffiliation.commissionEtrangereEcommerce",
+        "dossierAffiliation.commissionEtrangere"
+      ]
+    },
+    {
+      "token": "fraisMiseEnServiceEcommerce",
+      "contractField": "Frais de mise en service",
+      "required": false,
+      "sources": [
+        "dossierAffiliation.tarification.fraisMiseEnService",
+        "dossierAffiliation.tarification.fraisMiseEnServiceEcommerce",
+        "dossierAffiliation.fraisMiseEnServiceEcommerce"
+      ]
+    }
+  ],
+  "mappingReport": [
+    {
+      "token": "merchantNumber",
+      "contractField": "N° commerçant",
+      "required": false,
+      "source": "dossierAffiliation.meta.numeroCommercant",
+      "value": "10020"
+    },
+    {
+      "token": "pointOfSaleReference",
+      "contractField": "N° Point de Vente",
+      "required": false,
+      "source": "dossierAffiliation.meta.numeroPointDeVente",
+      "value": "ECM-01"
+    },
+    {
+      "token": "mcc",
+      "contractField": "MCC",
+      "required": false,
+      "source": "dossierAffiliation.commercant.mcc",
+      "value": "5399"
+    },
+    {
+      "token": "raisonSociale",
+      "contractField": "Raison sociale",
+      "required": true,
+      "source": "dossierAffiliation.commercant.raisonSociale",
+      "value": "Boutique Atlas SARL"
+    },
+    {
+      "token": "formeJuridique",
+      "contractField": "Forme juridique",
+      "required": false,
+      "source": "dossierAffiliation.commercant.formeJuridique",
+      "value": "SARL"
+    },
+    {
+      "token": "secteurActivite",
+      "contractField": "Secteur d'activité",
+      "required": false,
+      "source": "dossierAffiliation.commercant.secteur",
+      "value": "E-commerce"
+    },
+    {
+      "token": "enseigne",
+      "contractField": "Enseigne / Acronyme",
+      "required": false,
+      "source": "dossierAffiliation.commercant.nomCommercial",
+      "value": "Atlas Store"
+    },
+    {
+      "token": "adresse",
+      "contractField": "Adresse",
+      "required": true,
+      "source": "dossierAffiliation.commercant.adresse",
+      "value": "45 Boulevard Anfa"
+    },
+    {
+      "token": "quartier",
+      "contractField": "Quartier",
+      "required": false,
+      "source": "",
+      "value": ""
+    },
+    {
+      "token": "codePostal",
+      "contractField": "Code Postal",
+      "required": false,
+      "source": "",
+      "value": ""
+    },
+    {
+      "token": "ville",
+      "contractField": "Ville",
+      "required": true,
+      "source": "dossierAffiliation.commercant.ville",
+      "value": "Casablanca"
+    },
+    {
+      "token": "ice",
+      "contractField": "ICE",
+      "required": false,
+      "source": "dossierAffiliation.commercant.ice",
+      "value": "001234567000045"
+    },
+    {
+      "token": "rc",
+      "contractField": "Registre de Commerce",
+      "required": false,
+      "source": "dossierAffiliation.commercant.registreCommerce",
+      "value": "RC 458796"
+    },
+    {
+      "token": "patente",
+      "contractField": "Taxe Professionnelle (Patente)",
+      "required": false,
+      "source": "",
+      "value": ""
+    },
+    {
+      "token": "representantLegal",
+      "contractField": "Nom du représentant légal",
+      "required": false,
+      "source": "dossierAffiliation.commercant.representantLegal",
+      "value": "Salma Idrissi"
+    },
+    {
+      "token": "fonction",
+      "contractField": "Fonction",
+      "required": false,
+      "source": "",
+      "value": ""
+    },
+    {
+      "token": "telephoneFixe",
+      "contractField": "Téléphone Fixe",
+      "required": false,
+      "source": "dossierAffiliation.commercant.telephoneSecondaire",
+      "value": "+212522112233"
+    },
+    {
+      "token": "gsm",
+      "contractField": "GSM",
+      "required": true,
+      "source": "dossierAffiliation.commercant.telephone",
+      "value": "+212661112233"
+    },
+    {
+      "token": "emailReleve",
+      "contractField": "E-mail d'envoi du relevé",
+      "required": true,
+      "source": "dossierAffiliation.commercant.emailContact",
+      "value": "finance@atlas-store.ma"
+    },
+    {
+      "token": "beneficiairesEffectifs",
+      "contractField": "Nom(s) Bénéficiaire(s) Effectif(s)",
+      "required": false,
+      "source": "",
+      "value": ""
+    },
+    {
+      "token": "cin",
+      "contractField": "CIN",
+      "required": false,
+      "source": "",
+      "value": ""
+    },
+    {
+      "token": "dateNaissance",
+      "contractField": "Date de naissance",
+      "required": false,
+      "source": "",
+      "value": ""
+    },
+    {
+      "token": "nationalite",
+      "contractField": "Nationalité",
+      "required": false,
+      "source": "",
+      "value": ""
+    },
+    {
+      "token": "siteMarchandUrl",
+      "contractField": "URL du site marchand",
+      "required": false,
+      "source": "dossierAffiliation.services.siteMarchandUrl",
+      "value": "https://atlas-store.ma"
+    },
+    {
+      "token": "applicationMobile",
+      "contractField": "Nom de l'application mobile",
+      "required": false,
+      "source": "",
+      "value": ""
+    },
+    {
+      "token": "commissionLocaleEcommerce",
+      "contractField": "Taux commission locale",
+      "required": false,
+      "source": "dossierAffiliation.tarification.commissionLocale",
+      "value": "1.20 %"
+    },
+    {
+      "token": "commissionEtrangereEcommerce",
+      "contractField": "Taux commission étrangère",
+      "required": false,
+      "source": "dossierAffiliation.tarification.commissionEtrangere",
+      "value": "2.80 %"
+    },
+    {
+      "token": "fraisMiseEnServiceEcommerce",
+      "contractField": "Frais de mise en service",
+      "required": false,
+      "source": "dossierAffiliation.tarification.fraisMiseEnService",
+      "value": "1 200 MAD"
+    }
+  ]
+}

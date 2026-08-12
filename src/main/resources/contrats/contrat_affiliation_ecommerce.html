@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <title>Adhésion au Système E-Commerce</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      @page { size: A4; margin: 7mm; }
+      body { font-family: Arial, Helvetica, sans-serif; font-size: 9pt; color: #000; }
+      .page { background: #fff; width: 210mm; max-width: 100%; margin: 0 auto; padding: 6mm 7mm 5mm 7mm; display: flex; flex-direction: column; gap: 0; }
+      .header { display: flex; justify-content: space-between; align-items: center; padding: 4px 5px 6px 5px; margin-bottom: 3px; }
+      .logo-img { max-width: 205px; max-height: 46px; display: block; object-fit: contain; }
+      .header-title { text-align: right; font-size: 10.5pt; font-weight: bold; line-height: 1.7; }
+      .stitle { background: #d0d0d0; text-align: center; font-weight: bold; font-size: 8.5pt; padding: 4px 0; border: 0.5px solid #999; }
+      .stitle.rib-title { font-weight: 700; }
+      .bbox { border: 0.5px solid #999; border-top: none; padding: 6px 8px 6px 8px; }
+      .bbox-lana { padding: 8px 9px 9px 9px; min-height: 42px; }
+      .bbox-merchant { padding: 8px 9px 9px 9px; min-height: 118px; }
+      .bbox-services { padding: 8px 10px 9px 10px; min-height: 76px; }
+      .bbox-pricing { padding: 9px 10px 10px 10px; min-height: 74px; }
+      .bbox-pricing .frow { margin-bottom: 8px; }
+      .bbox-pricing .dots { height: 17px; }
+      .frow { display: flex; align-items: flex-end; width: 100%; margin-bottom: 6px; gap: 0; }
+      .frow:last-child { margin-bottom: 0; }
+      .lbl { font-size: 8pt; white-space: nowrap; padding-bottom: 1px; flex-shrink: 0; line-height: 1; }
+      .dots { flex: 1; border-bottom: 1px dotted #777; min-width: 6px; margin-bottom: 2px; height: 15px; padding: 0 2px 1px 2px; display: flex; align-items: flex-end; overflow: hidden; white-space: nowrap; font-size: 8pt; font-weight: bold; }
+      .f1 { flex: 1; }
+      .f15 { flex: 1.5; }
+      .f2 { flex: 2; }
+      .f25 { flex: 2.5; }
+      .f3 { flex: 3; }
+      .f4 { flex: 4; }
+      .f5 { flex: 5; }
+      .f6 { flex: 6; }
+      .f7 { flex: 7; }
+      .cbrow { display: flex; gap: 24px; align-items: center; margin-bottom: 6px; }
+      .cbi { display: flex; align-items: center; gap: 5px; font-size: 8.5pt; }
+      .cb { width: 12px; height: 12px; border: 0.8px solid #000; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 10pt; font-weight: 700; line-height: 1; }
+      .svc-wrap { display: flex; align-items: stretch; }
+      .svc-left { width: 50%; padding-right: 10px; }
+      .svc-cbi { display: flex; align-items: center; gap: 5px; font-size: 8.5pt; margin-bottom: 7px; }
+      .svc-right { flex: 1; display: flex; flex-direction: column; gap: 10px; justify-content: center; }
+      .psp-row { border: 0.5px solid #999; border-top: none; display: table; table-layout: fixed; width: 100%; }
+      .psp-col { display: table-cell; width: 20%; text-align: center; vertical-align: middle; padding: 10px 4px; }
+      .psp-logo-box { width: 100%; max-width: 110px; height: 46px; margin: 0 auto; display: flex; align-items: center; justify-content: center; }
+      .psp-logo-box-wide { max-width: 118px; height: 50px; }
+      .psp-logo-img { display: block; width: 100%; height: 100%; object-fit: contain; object-position: center; }
+      .psp-logo-cmi { font-size: 31px; font-weight: 900; color: #e8001c; letter-spacing: -1px; font-family: Arial Black, Arial, sans-serif; line-height: 1; }
+      .rib-bbox { border: 0.5px solid #999; border-top: none; padding: 10px 12px 12px 12px; margin: 0 -2px; min-height: 66px; overflow: hidden; }
+      .rib-wrap { display: table; table-layout: fixed; width: 100%; max-width: 100%; border-collapse: separate; border-spacing: 7px 0; }
+      .rib-g { display: table-cell; vertical-align: bottom; min-width: 0; }
+      .rib-g-bank { width: 10%; }
+      .rib-g-city { width: 10%; }
+      .rib-g-account { width: 62%; }
+      .rib-g-key { width: 8%; }
+      .rib-g-currency { width: 10%; }
+      .rib-cells { display: table; table-layout: fixed; width: 100%; max-width: 100%; border-collapse: separate; border-spacing: 0; }
+      .rib-c { display: table-cell; width: auto; min-width: 0; height: 20px; border-top: none; border-left: 1px solid #333; border-right: none; border-bottom: 1px solid #333; font-size: 9pt; font-weight: 400; text-align: center; line-height: 20px; padding: 0; }
+      .rib-c:last-child { border-right: 1px solid #333; }
+      .rib-lbl { margin-top: 5px; font-size: 6pt; color: #333; white-space: nowrap; font-weight: 400; text-align: center; }
+      .legal { font-size: 7pt; font-weight: 400; line-height: 1.5; margin-top: 5px; margin-bottom: 10px; text-align: justify; }
+      .fait-row { display: flex; align-items: flex-end; gap: 0; margin-top: 9px; margin-bottom: 8px; }
+      .fait-row .lbl { font-weight: 700; }
+      .sig-head-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px; margin-bottom: 4px; }
+      .sig-head { font-size: 6.8pt; font-weight: 700; line-height: 1.1; min-height: 12px; display: flex; align-items: flex-end; white-space: nowrap; }
+      .sig-box-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: stretch; }
+      .sig-box { border: 1px solid #888; height: 64px; position: relative; width: 100%; }
+      .reserve-tag { position: absolute; right: 8px; top: 8px; border: 1px solid #888; padding: 2px 8px; font-size: 7pt; background: #fff; color: #555; }
+      .sig-footer-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 4px; font-size: 5.8pt; color: #777; line-height: 1.35; }
+      .sig-footer-right { text-align: right; }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div class="header">
+        <div><img class="logo-img" src="{{logoUrl}}" alt="LANA CASH" /></div>
+        <div class="header-title">Adhésion au Système E-Commerce<br />Conditions Particulières</div>
+      </div>
+
+      <div class="stitle">Cadre réservé à LANA CASH</div>
+      <div class="bbox bbox-lana">
+        <div class="cbrow">
+          <div class="cbi"><span class="cb">{{creationCheck}}</span>Création</div>
+          <div class="cbi"><span class="cb">{{avenantCheck}}</span>Avenant</div>
+        </div>
+        <div class="frow">
+          <span class="lbl">N° commerçant :</span><div class="dots f3">{{merchantNumber}}</div>
+          <span class="lbl">&#160;&#160;N° Point de Vente :</span><div class="dots f3">{{pointOfSaleReference}}</div>
+          <span class="lbl">&#160;&#160;MCC :</span><div class="dots f15">{{mcc}}</div>
+        </div>
+      </div>
+
+      <div class="stitle">Commerçant (cadre réservé au e-commerçant)</div>
+      <div class="bbox bbox-merchant">
+        <div class="frow">
+          <span class="lbl">Raison sociale :</span><div class="dots f4">{{raisonSociale}}</div>
+          <span class="lbl">&#160;&#160;Forme juridique :</span><div class="dots f2">{{formeJuridique}}</div>
+          <span class="lbl">&#160;&#160;Secteur d'activité :</span><div class="dots f2">{{secteurActivite}}</div>
+        </div>
+        <div class="frow">
+          <span class="lbl">Enseigne / Acronyme :</span><div class="dots f7">{{enseigne}}</div>
+        </div>
+        <div class="frow">
+          <span class="lbl">Adresse :</span><div class="dots f7">{{adresse}}</div>
+        </div>
+        <div class="frow">
+          <span class="lbl">Quartier :</span><div class="dots f3">{{quartier}}</div>
+          <span class="lbl">&#160;&#160;Code Postal :</span><div class="dots f2">{{codePostal}}</div>
+          <span class="lbl">&#160;&#160;Ville :</span><div class="dots f3">{{ville}}</div>
+        </div>
+        <div class="frow">
+          <span class="lbl">ICE :</span><div class="dots f2">{{ice}}</div>
+          <span class="lbl">&#160;&#160;Registre de Commerce :</span><div class="dots f2">{{rc}}</div>
+          <span class="lbl">&#160;&#160;Taxe Professionnelle (Patente) :</span><div class="dots f2">{{patente}}</div>
+        </div>
+        <div class="frow">
+          <span class="lbl">Nom du représentant légal :</span><div class="dots f4">{{representantLegal}}</div>
+          <span class="lbl">&#160;&#160;Fonction :</span><div class="dots f3">{{fonction}}</div>
+        </div>
+        <div class="frow">
+          <span class="lbl">Téléphone Fixe :</span><div class="dots f2">{{telephoneFixe}}</div>
+          <span class="lbl">&#160;&#160;GSM :</span><div class="dots f2">{{gsm}}</div>
+          <span class="lbl">&#160;&#160;E-mail d'envoi du relevé :</span><div class="dots f3">{{emailReleve}}</div>
+        </div>
+        <div class="frow">
+          <span class="lbl">Nom(s) Bénéficiaire(s) Effectif(s) :</span><div class="dots f2">{{beneficiairesEffectifs}}</div>
+          <span class="lbl">&#160;&#160;CIN :</span><div class="dots f15">{{cin}}</div>
+          <span class="lbl">&#160;&#160;Date de naissance :</span><div class="dots f15">{{dateNaissance}}</div>
+          <span class="lbl">&#160;&#160;Nationalité :</span><div class="dots f15">{{nationalite}}</div>
+        </div>
+      </div>
+
+      <div class="stitle">Services LANA CASH</div>
+      <div class="bbox bbox-services">
+        <div class="svc-wrap">
+          <div class="svc-left">
+            <div class="svc-cbi"><span class="cb">{{integrationSiteCheck}}</span>Intégration sur site marchand</div>
+            <div class="svc-cbi"><span class="cb">{{integrationMobileCheck}}</span>Intégration sur application mobile</div>
+            <div class="svc-cbi"><span class="cb">{{payByLinkManuelCheck}}</span>PayByLink Manuel</div>
+            <div class="svc-cbi" style="margin-bottom:0;"><span class="cb">{{payByLinkAutomatiqueCheck}}</span>PayByLink Automatique</div>
+          </div>
+          <div class="svc-right">
+            <div class="frow" style="margin-bottom:0;">
+              <span class="lbl">URL du site marchand :</span><div class="dots f5">{{siteMarchandUrl}}</div>
+            </div>
+            <div class="frow" style="margin-bottom:0;">
+              <span class="lbl">Nom de l'application mobile :</span><div class="dots f4">{{applicationMobile}}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="stitle">Systèmes acceptés par la plateforme PSP de LANA CASH</div>
+      <div class="psp-row">
+        <div class="psp-col">
+          <div class="psp-logo-box"><div class="psp-logo-cmi">CMI</div></div>
+        </div>
+        <div class="psp-col">
+          <div class="psp-logo-box"><img class="psp-logo-img" src="{{visaLogoUrl}}" alt="Visa" /></div>
+        </div>
+        <div class="psp-col">
+          <div class="psp-logo-box"><img class="psp-logo-img" src="{{mastercardLogoUrl}}" alt="Mastercard" /></div>
+        </div>
+        <div class="psp-col">
+          <div class="psp-logo-box psp-logo-box-wide"><img class="psp-logo-img" src="{{unionPayLogoUrl}}" alt="UnionPay" /></div>
+        </div>
+        <div class="psp-col">
+          <div class="psp-logo-box psp-logo-box-wide"><img class="psp-logo-img" src="{{marocPayLogoUrl}}" alt="Maroc Pay" /></div>
+        </div>
+      </div>
+
+      <div class="stitle">Conditions tarifaires</div>
+      <div class="bbox bbox-pricing">
+        <div class="frow">
+          <span class="lbl">Taux de commission Transactions locales (HT)* :</span>
+          <div class="dots f2">{{commissionLocaleEcommerce}}</div>
+          <span class="lbl">&#160;&#160;Frais de mise en service (TTC MAD / TVA 20%) :</span>
+          <div class="dots f2">{{fraisMiseEnServiceEcommerce}}</div>
+        </div>
+        <div class="frow">
+          <span class="lbl">Taux de commission Transactions étrangères (HT)* :</span>
+          <div class="dots f5">{{commissionEtrangereEcommerce}}</div>
+        </div>
+        <div style="font-size:7.5pt;line-height:1.7;margin-top:3px;">
+          Le règlement des frais de mise en service se fera par chèque à l'ordre de LANA CASH.<br />
+          * TVA : 10%
+        </div>
+      </div>
+
+      <div class="stitle rib-title">Compte de domiciliation bancaire (cadre réservé au e-commerçant)</div>
+      <div class="rib-bbox">
+        <div class="rib-wrap">
+          <div class="rib-g rib-g-bank">
+            <div class="rib-cells">{{bankCodeCells}}</div>
+            <div class="rib-lbl">Code Banque</div>
+          </div>
+          <div class="rib-g rib-g-city">
+            <div class="rib-cells">{{cityCodeCells}}</div>
+            <div class="rib-lbl">Code Ville</div>
+          </div>
+          <div class="rib-g rib-g-account">
+            <div class="rib-cells">{{accountNumberCells}}</div>
+            <div class="rib-lbl">Numéro de compte</div>
+          </div>
+          <div class="rib-g rib-g-key">
+            <div class="rib-cells">{{ribKeyCells}}</div>
+            <div class="rib-lbl">Clé RIB</div>
+          </div>
+          <div class="rib-g rib-g-currency">
+            <div class="rib-cells">{{currencyCells}}</div>
+            <div class="rib-lbl">Devise</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="legal">
+        Conformément à la loi n°09-08, vous disposez d'un droit d'accès, de rectification et d'opposition au traitement de vos données personnelles.<br />
+        Le traitement relatif à l'activité d'acquisition monétaire a été autorisé par la CNDP sous N° d'autorisation en cours de délivrance.*<br />
+        J'adhère par le présent contrat au Système de Paiement E-Commerce, proposé par LANA CASH, aux Conditions Particulières indiquées ci-dessus et reconnais avoir pris connaissance des Conditions Générales du Système de Paiement E-Commerce et déclare les accepter sans réserve.
+      </div>
+
+      <div class="fait-row">
+        <span class="lbl">Fait à,</span><div class="dots f3">{{faitAVille}}</div>
+        <span class="lbl" style="margin-left:40px;">Le,</span><div class="dots f3">{{contractDate}}</div>
+      </div>
+
+      <div class="sig-head-row">
+        <div class="sig-head">Cachet et Signature de l'adhérent précédés de la mention "lu et approuvé"</div>
+        <div class="sig-head">Date et Signature Autorisée de LANA CASH</div>
+      </div>
+
+      <div class="sig-box-row">
+        <div class="sig-box"></div>
+        <div class="sig-box">
+          <div class="reserve-tag">Réservé à LANA CASH</div>
+        </div>
+      </div>
+
+      <div class="sig-footer-row">
+        <div>LANA CASH - S.A. au capital de 60.000.000 Dirhams<br />3, Rue Abou Dhabi, Oasis - 20103 Casablanca - Maroc</div>
+        <div class="sig-footer-right">RC 434127 - IF 27527045 - Patente 34750288 CNSS 1563684 - ICE 002258990000045<br />Tél 0522 47 88 74 - www.lanacash.ma</div>
+      </div>
+    </div>
+  </body>
+</html>

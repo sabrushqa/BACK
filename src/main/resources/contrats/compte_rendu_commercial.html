@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <title>Compte-rendu commercial</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+
+      @page {
+        size: A4;
+        margin: {{pageMargin}};
+      }
+
+      body {
+        font-family: Arial, Helvetica, sans-serif;
+        font-size: 10.7px;
+        line-height: 1.42;
+        color: #111;
+        margin: 0;
+      }
+
+      .page {
+        width: 186mm;
+        max-width: 100%;
+        margin: 0 auto;
+      }
+
+      .logo {
+        width: 192px;
+        margin-bottom: 16px;
+      }
+
+      .title {
+        background: #d9d9d9;
+        border: 1px solid #a8a8a8;
+        text-align: center;
+        font-size: 16px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        padding: 6px 10px;
+        margin: 0 0 14px 0;
+      }
+
+      .section {
+        margin-bottom: 13px;
+        page-break-inside: avoid;
+      }
+
+      .line {
+        margin-bottom: 8px;
+        line-height: 1.42;
+      }
+
+      .label {
+        font-weight: 700;
+      }
+
+      .checkbox {
+        display: inline-block;
+        width: 14px;
+        height: 14px;
+        border: 1px solid #4b4b4b;
+        margin-right: 5px;
+        font-size: 10px;
+        font-weight: 700;
+        line-height: 14px;
+        text-align: center;
+        vertical-align: middle;
+        background: #fff;
+      }
+
+      .option {
+        display: inline-block;
+        margin-right: 12px;
+        vertical-align: top;
+      }
+
+      .fill {
+        display: inline-block;
+        min-height: 14px;
+        max-width: 100%;
+        border-bottom: 1px dotted #4b4b4b;
+        vertical-align: bottom;
+        padding: 0 3px 2px 3px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+      }
+
+      .fill-short {
+        width: 76px;
+      }
+
+      .fill-medium {
+        width: 168px;
+      }
+
+      .fill-wide {
+        display: block;
+        width: 100%;
+        min-width: 0;
+        margin-top: 5px;
+        white-space: normal;
+        height: 32px;
+        line-height: 1.32;
+        overflow: hidden;
+        text-overflow: clip;
+      }
+
+      .fill-half {
+        width: 140px;
+      }
+
+      .comment-box {
+        height: 60px;
+        border: 1px dotted #4b4b4b;
+        padding: 7px 9px;
+        line-height: 1.48;
+        overflow: hidden;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+      }
+
+      .footer {
+        margin-top: 14px;
+        page-break-inside: avoid;
+      }
+
+      .signature {
+        text-align: right;
+        font-weight: 700;
+        margin-top: 22px;
+        line-height: 1.4;
+      }
+
+      body.compact {
+        font-size: 9.5px;
+        line-height: 1.3;
+      }
+
+      body.compact .logo {
+        width: 172px;
+        margin-bottom: 14px;
+      }
+
+      body.compact .title {
+        font-size: 14px;
+        padding: 5px 8px;
+        margin-bottom: 12px;
+      }
+
+      body.compact .section {
+        margin-bottom: 10px;
+      }
+
+      body.compact .line {
+        margin-bottom: 6px;
+      }
+
+      body.compact .fill-wide {
+        height: 26px;
+        margin-top: 4px;
+      }
+
+      body.compact .comment-box {
+        height: 50px;
+        padding: 6px 8px;
+        line-height: 1.36;
+      }
+
+      body.compact .footer {
+        margin-top: 10px;
+      }
+
+      body.compact .signature {
+        margin-top: 14px;
+      }
+
+      body.ultra-compact {
+        font-size: 8.8px;
+        line-height: 1.2;
+      }
+
+      body.ultra-compact .logo {
+        width: 154px;
+        margin-bottom: 12px;
+      }
+
+      body.ultra-compact .title {
+        font-size: 12px;
+        padding: 4px 7px;
+        margin-bottom: 10px;
+      }
+
+      body.ultra-compact .section {
+        margin-bottom: 8px;
+      }
+
+      body.ultra-compact .line {
+        margin-bottom: 5px;
+      }
+
+      body.ultra-compact .fill-wide {
+        height: 22px;
+        margin-top: 3px;
+      }
+
+      body.ultra-compact .comment-box {
+        height: 40px;
+        padding: 5px 7px;
+        line-height: 1.24;
+      }
+
+      body.ultra-compact .footer {
+        margin-top: 8px;
+      }
+
+      body.ultra-compact .signature {
+        margin-top: 12px;
+      }
+
+      body.one-page {
+        font-size: 7.9px;
+        line-height: 1.08;
+      }
+
+      body.one-page .page {
+        width: 200mm;
+      }
+
+      body.one-page .logo {
+        width: 136px;
+        margin-bottom: 7px;
+      }
+
+      body.one-page .title {
+        font-size: 10.5px;
+        padding: 3px 6px;
+        margin-bottom: 6px;
+      }
+
+      body.one-page .section {
+        margin-bottom: 5px;
+        page-break-inside: avoid;
+      }
+
+      body.one-page .line {
+        margin-bottom: 3px;
+        line-height: 1.08;
+      }
+
+      body.one-page .checkbox {
+        width: 10px;
+        height: 10px;
+        margin-right: 3px;
+        font-size: 7px;
+        line-height: 10px;
+      }
+
+      body.one-page .option {
+        margin-right: 7px;
+      }
+
+      body.one-page .fill {
+        min-height: 10px;
+        padding: 0 2px 1px 2px;
+      }
+
+      body.one-page .fill-short {
+        width: 52px;
+      }
+
+      body.one-page .fill-medium {
+        width: 118px;
+      }
+
+      body.one-page .fill-half {
+        width: 98px;
+      }
+
+      body.one-page .fill-wide {
+        height: 16px;
+        margin-top: 2px;
+        line-height: 1.08;
+      }
+
+      body.one-page .comment-box {
+        height: 25px;
+        padding: 3px 5px;
+        line-height: 1.08;
+      }
+
+      body.one-page .footer {
+        margin-top: 5px;
+      }
+
+      body.one-page .signature {
+        margin-top: 6px;
+        line-height: 1.08;
+      }
+    </style>
+  </head>
+  <body class="{{layoutModeClass}}">
+    <div class="page">
+      <img class="logo" src="{{logoUrl}}" alt="Lana Cash" />
+      <div class="title">Compte-rendu commercial</div>
+
+      <div class="section">
+        <div class="line">
+          <span class="option"><span class="checkbox">{{qualificationAffilieCheck}}</span>Affilie</span>
+          <span class="option"><span class="checkbox">{{qualificationProspectCheck}}</span>Prospect</span>
+        </div>
+
+        <div class="line">
+          <span class="label">Si affilie quel acquereur:</span>
+          <span class="fill fill-wide">{{acquereur}}</span>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="line">
+          <span class="label">Origine du prospect:</span>
+          <span class="option"><span class="checkbox">{{origineProspectionDirecteCheck}}</span>Prospection directe</span>
+          <span class="option"><span class="checkbox">{{origineMasterFranchiseCheck}}</span>Master Franchise</span>
+          <span class="option"><span class="checkbox">{{origineCihCheck}}</span>CIH</span>
+          <span class="option"><span class="checkbox">{{origineUmniaCheck}}</span>UMNIA</span>
+        </div>
+
+        <div class="line">
+          <span class="option"><span class="checkbox">{{origineApporteurCheck}}</span>Apporteur d'affaires</span>
+          <span class="fill fill-half">{{origineApporteurDetail}}</span>
+          <span class="option"><span class="checkbox">{{origineAutreBanqueCheck}}</span>Autre Banques</span>
+          <span class="fill fill-half">{{origineAutreBanqueDetail}}</span>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="line">
+          <span class="label">Nom et prenom du contact:</span>
+          <span class="fill fill-medium">{{contactNomPrenom}}</span>
+          <span class="label">Fonction:</span>
+          <span class="fill fill-medium">{{contactFonction}}</span>
+        </div>
+
+        <div class="line">
+          <span class="label">Acronyme Point de vente:</span>
+          <span class="fill fill-medium">{{pointVenteAcronyme}}</span>
+          <span class="label">Actionnaire(s):</span>
+          <span class="fill fill-medium">{{actionnaires}}</span>
+        </div>
+
+        <div class="line">
+          <span class="label">Commercant:</span>
+          <span class="fill fill-medium">{{commercant}}</span>
+          <span class="label">Chaine:</span>
+          <span class="fill fill-medium">{{chaine}}</span>
+        </div>
+
+        <div class="line">
+          <span class="label">Relations eventuelles avec d'autres commercants clients LC:</span>
+          <span class="fill fill-wide">{{relationsLc}}</span>
+        </div>
+
+        <div class="line">
+          <span class="label">Date d'ouverture:</span>
+          <span class="fill fill-medium">{{dateOuverture}}</span>
+          <span class="label">Nombre d'employes:</span>
+          <span class="fill fill-medium">{{nombreEmployes}}</span>
+        </div>
+
+        <div class="line">
+          <span class="label">Activite du commercant:</span>
+          <span class="fill fill-medium">{{activite}}</span>
+          <span class="label">MCC:</span>
+          <span class="fill fill-short">{{mcc}}</span>
+          <span class="label">Standing du magasin:</span>
+          <span class="fill fill-short">{{standingMagasin}}</span>
+        </div>
+
+        <div class="line">
+          <span class="label">Nature des marchandises ou services en vente:</span>
+          <span class="fill fill-wide">{{natureMarchandises}}</span>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="line">
+          <span class="label">Superficie du Local:</span>
+          <span class="option"><span class="checkbox">{{superficie1030Check}}</span>de 10 a 30 m2</span>
+          <span class="option"><span class="checkbox">{{superficie30100Check}}</span>entre 30 et 100 m2</span>
+          <span class="option"><span class="checkbox">{{superficie100PlusCheck}}</span>au-dela de 100 m2</span>
+        </div>
+
+        <div class="line">
+          <span class="label">Le local est:</span>
+          <span class="option"><span class="checkbox">{{localAcheteCheck}}</span>achete</span>
+          <span class="option"><span class="checkbox">{{localLoueCheck}}</span>loue</span>
+        </div>
+
+        <div class="line">
+          <span class="label">Chiffre d'affaires tout moyen de paiement confondu / an:</span>
+        </div>
+        <div class="line">
+          <span class="option"><span class="checkbox">{{caMoins05Check}}</span>Moins de 0.5 MDHS</span>
+          <span class="option"><span class="checkbox">{{ca051Check}}</span>de 0.5 a 1 MDHS</span>
+          <span class="option"><span class="checkbox">{{ca15Check}}</span>de 1 a 5 MDHS</span>
+          <span class="option"><span class="checkbox">{{caPlus5Check}}</span>plus de 5 MDHS</span>
+        </div>
+
+        <div class="line">
+          <span class="label">Part estimee des paiements par cartes:</span>
+          <span class="fill fill-short">{{partPaiementCarte}}</span>
+          <span class="label">dont Cartes Locales:</span>
+          <span class="fill fill-short">{{partCarteLocale}}</span>
+        </div>
+
+        <div class="line">
+          <span class="label">Profil du commercant:</span>
+          <span class="option"><span class="checkbox">{{profilOffshoreCheck}}</span>Off Shore virement</span>
+          <span class="option"><span class="checkbox">{{profilInshoreCheck}}</span>In Shore virement</span>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="line">
+          <span class="label">Appreciation generale de la visite:</span>
+          <span class="option"><span class="checkbox">{{appreciationFavorableCheck}}</span>Favorable</span>
+          <span class="option"><span class="checkbox">{{appreciationDefavorableCheck}}</span>Defavorable</span>
+        </div>
+
+        <div class="comment-box">{{commentaire}}</div>
+      </div>
+
+      <div class="footer">
+        <div class="line">
+          <span class="label">Fait a</span>
+          <span class="fill fill-medium">{{faitA}}</span>
+          <span class="label">Le</span>
+          <span class="fill fill-medium">{{dateVisite}}</span>
+        </div>
+
+        <div class="signature">
+          <div>Nom et Prenom du commercial</div>
+          <div>{{commercialNom}}</div>
+          <div>Signature</div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

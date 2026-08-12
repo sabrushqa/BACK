@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <title>Affiliation Systeme de Paiement</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      @page { size: A4; margin: 6mm; }
+      body { font-family: Arial, Helvetica, sans-serif; font-size: 7.1pt; color: #000; }
+      .sheet {
+        width: 100%;
+        height: 285mm;
+        max-height: 285mm;
+        overflow: hidden;
+        background: #fff;
+        padding: 3.5mm 4mm 3mm 4mm;
+        display: flex;
+        flex-direction: column;
+      }
+      .header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 4px;
+      }
+      .logo-img { max-width: 182px; max-height: 56px; object-fit: contain; display: block; }
+      .header-title { text-align: right; font-weight: 700; font-size: 9.5pt; line-height: 1.2; }
+      .section-title {
+        background: #d3d3d3;
+        border: 0.5px solid #9d9d9d;
+        text-align: center;
+        font-weight: 700;
+        font-size: 7.4pt;
+        line-height: 1;
+        padding: 4px 0;
+      }
+      .block {
+        border-left: 0.5px solid #9d9d9d;
+        border-right: 0.5px solid #9d9d9d;
+        border-bottom: 0.5px solid #9d9d9d;
+        padding: 5px 7px 5px 7px;
+      }
+      .block-intro {
+        padding: 6px 8px 6px 8px;
+        min-height: 39px;
+      }
+      .block-services {
+        padding: 6px 8px 6px 8px;
+        min-height: 54px;
+      }
+      .block-point-of-sale {
+        padding: 6px 8px 7px 8px;
+        min-height: 72px;
+      }
+      .block-point-of-sale .row {
+        margin-bottom: 4px;
+      }
+      .block-point-of-sale .line {
+        height: 13px;
+      }
+      .checks { display: flex; gap: 24px; margin-bottom: 4px; align-items: center; }
+      .check-item { display: inline-flex; align-items: center; gap: 5px; font-size: 7.2pt; }
+      .cb {
+        width: 12px;
+        height: 12px;
+        border: 0.8px solid #000;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 9pt;
+        line-height: 1;
+        flex-shrink: 0;
+      }
+      .row { display: flex; gap: 0; align-items: flex-end; margin-bottom: 4px; }
+      .row:last-child { margin-bottom: 0; }
+      .field { display: flex; align-items: flex-end; min-width: 0; flex: 1; }
+      .label { white-space: nowrap; font-size: 7.1pt; line-height: 1; padding-bottom: 1px; }
+      .line {
+        flex: 1;
+        min-width: 5px;
+        border-bottom: 1px dotted #777;
+        margin: 0 1px 1px 2px;
+        height: 13px;
+        display: flex;
+        align-items: flex-end;
+        overflow: hidden;
+        white-space: nowrap;
+        font-size: 7.1pt;
+        font-weight: 700;
+      }
+      .f1 { flex: 1; }
+      .f15 { flex: 1.5; }
+      .f2 { flex: 2; }
+      .f3 { flex: 3; }
+      .f4 { flex: 4; }
+      .f5 { flex: 5; }
+      .f6 { flex: 6; }
+      .f7 { flex: 7; }
+
+      .services-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        column-gap: 20px;
+        row-gap: 4px;
+        margin-bottom: 3px;
+      }
+      .service-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 7.1pt;
+        min-height: 13px;
+      }
+      .services-note { text-align: center; font-size: 6.1pt; line-height: 1.2; }
+
+      .logos-box {
+        border-left: 0.5px solid #9d9d9d;
+        border-right: 0.5px solid #9d9d9d;
+        border-bottom: 0.5px solid #9d9d9d;
+        padding: 10px 10px 11px 10px;
+      }
+      .logos-row {
+        width: 100%;
+        display: grid;
+        grid-template-columns: repeat(8, minmax(0, 1fr));
+        align-items: center;
+        gap: 10px;
+      }
+      .brand { display: inline-flex; align-items: center; justify-content: center; min-width: 0; }
+      .brand img { width: 84px; height: 38px; object-fit: contain; display: block; }
+      .brand-cmi svg { width: 84px; height: 34px; display: block; }
+      .logo-jcb { display: flex; align-items: flex-end; gap: 1px; }
+      .logo-jcb span {
+        width: 13px;
+        height: 22px;
+        border-radius: 2px;
+        color: #fff;
+        font-size: 9.5pt;
+        font-weight: 700;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
+      }
+      .logo-jcb .j { background: #005baa; }
+      .logo-jcb .c { background: #1ea74a; }
+      .logo-jcb .b { background: #d01e30; }
+      .brand-discover img { width: 92px; height: 40px; }
+      .brand-diner img { width: 88px; height: 42px; }
+      .brand-unionpay img { width: 90px; height: 40px; }
+      .brand-marocpay img { width: 92px; height: 40px; }
+
+      .equip-box {
+        border-left: 0.5px solid #9d9d9d;
+        border-right: 0.5px solid #9d9d9d;
+        border-bottom: 0.5px solid #9d9d9d;
+        padding: 5px 7px 6px 7px;
+        min-height: 52px;
+      }
+      .equip-grid {
+        display: grid;
+        grid-template-columns: 1.1fr 1.4fr 0.95fr 0.85fr 1.1fr;
+        column-gap: 8px;
+      }
+      .equip-col { display: flex; flex-direction: column; gap: 3px; }
+      .equip-item { display: inline-flex; align-items: center; gap: 5px; font-size: 7.1pt; min-height: 12px; }
+      .equip-number { display: flex; align-items: flex-end; }
+      .equip-note { margin-top: 3px; font-size: 6pt; }
+
+      .pricing-box {
+        border-left: 0.5px solid #9d9d9d;
+        border-right: 0.5px solid #9d9d9d;
+        border-bottom: 0.5px solid #9d9d9d;
+        padding: 6px 8px 7px 8px;
+        min-height: 48px;
+      }
+      .pricing-box .row {
+        margin-bottom: 4px;
+      }
+      .package-row {
+        display: flex;
+        justify-content: space-around;
+        align-items: center;
+        gap: 10px;
+        margin-top: 4px;
+      }
+      .package-item { display: inline-flex; align-items: center; gap: 5px; font-size: 7.1pt; min-height: 12px; }
+
+      .rib-box {
+        border-left: 0.5px solid #9d9d9d;
+        border-right: 0.5px solid #9d9d9d;
+        border-bottom: 0.5px solid #9d9d9d;
+        padding: 6px 9px 7px 9px;
+        min-height: 44px;
+      }
+      .rib-wrap {
+        display: table;
+        table-layout: fixed;
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 7px 0;
+      }
+      .rib-g { display: table-cell; vertical-align: bottom; min-width: 0; }
+      .rib-g-bank { width: 10%; }
+      .rib-g-city { width: 10%; }
+      .rib-g-account { width: 62%; }
+      .rib-g-key { width: 8%; }
+      .rib-g-currency { width: 10%; }
+      .rib-cells {
+        display: table;
+        table-layout: fixed;
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+      }
+      .rib-c {
+        display: table-cell;
+        width: auto;
+        height: 16px;
+        border-left: 1px solid #333;
+        border-bottom: 1px solid #333;
+        text-align: center;
+        font-size: 7pt;
+        line-height: 16px;
+      }
+      .rib-c:last-child { border-right: 1px solid #333; }
+      .rib-lbl { margin-top: 2px; text-align: center; font-size: 5.8pt; }
+
+      .legal {
+        font-size: 6.2pt;
+        line-height: 1.3;
+        margin-top: 5px;
+        margin-bottom: 6px;
+        text-align: justify;
+      }
+      .fait-row {
+        display: flex;
+        align-items: flex-end;
+        gap: 0;
+        margin-bottom: 5px;
+      }
+      .signatures {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin-bottom: 4px;
+      }
+      .sig-col { display: flex; flex-direction: column; }
+      .sig-title { font-size: 7.2pt; font-weight: 700; margin-bottom: 3px; }
+      .sig-box {
+        border: 1px solid #888;
+        height: 62px;
+        position: relative;
+      }
+      .sig-meta {
+        margin-top: 3px;
+        font-size: 5.5pt;
+        line-height: 1.3;
+        color: #666;
+      }
+      .reserve-tag {
+        position: absolute;
+        right: 6px;
+        top: 6px;
+        border: 1px solid #888;
+        padding: 2px 7px;
+        font-size: 7pt;
+        background: #fff;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="sheet">
+      <div class="header">
+        <div><img class="logo-img" src="{{logoUrl}}" alt="LANA CASH" /></div>
+        <div class="header-title">Affiliation au Systeme de Paiement<br />Conditions Particulieres</div>
+      </div>
+
+      <div class="section-title">Cadre reserve a LANA CASH</div>
+      <div class="block block-intro">
+        <div class="checks">
+          <span class="check-item"><span class="cb">{{creationCheck}}</span>Creation</span>
+          <span class="check-item"><span class="cb">{{avenantCheck}}</span>Avenant</span>
+        </div>
+        <div class="row">
+          <div class="field f3"><span class="label">N° commercant :</span><span class="line">{{merchantNumber}}</span></div>
+          <div class="field f3"><span class="label">N° Point de Vente :</span><span class="line">{{pointOfSaleReference}}</span></div>
+          <div class="field f15"><span class="label">MCC :</span><span class="line">{{mcc}}</span></div>
+        </div>
+      </div>
+
+      <div class="section-title">Chaine</div>
+      <div class="block block-services">
+        <div class="row">
+          <div class="field f4"><span class="label">Raison sociale :</span><span class="line">{{raisonSociale}}</span></div>
+          <div class="field f2"><span class="label">Forme juridique :</span><span class="line">{{formeJuridique}}</span></div>
+          <div class="field f2"><span class="label">Secteur d'activite :</span><span class="line">{{secteurActivite}}</span></div>
+        </div>
+        <div class="row">
+          <div class="field f7"><span class="label">Adresse :</span><span class="line">{{adresse}}</span></div>
+        </div>
+        <div class="row">
+          <div class="field f3"><span class="label">Quartier :</span><span class="line">{{quartier}}</span></div>
+          <div class="field f2"><span class="label">Code Postal :</span><span class="line">{{codePostal}}</span></div>
+          <div class="field f3"><span class="label">Ville :</span><span class="line">{{ville}}</span></div>
+        </div>
+        <div class="row">
+          <div class="field f2"><span class="label">ICE :</span><span class="line">{{ice}}</span></div>
+          <div class="field f2"><span class="label">Registre de Commerce :</span><span class="line">{{rc}}</span></div>
+          <div class="field f2"><span class="label">Taxe Professionnelle (Patente) :</span><span class="line">{{patente}}</span></div>
+        </div>
+      </div>
+
+      <div class="section-title">Commercant</div>
+      <div class="block">
+        <div class="row">
+          <div class="field f4"><span class="label">Raison sociale :</span><span class="line">{{raisonSociale}}</span></div>
+          <div class="field f2"><span class="label">Forme juridique :</span><span class="line">{{formeJuridique}}</span></div>
+          <div class="field f2"><span class="label">Secteur d'activite :</span><span class="line">{{secteurActivite}}</span></div>
+        </div>
+        <div class="row">
+          <div class="field f7"><span class="label">Adresse :</span><span class="line">{{adresse}}</span></div>
+        </div>
+        <div class="row">
+          <div class="field f3"><span class="label">Quartier :</span><span class="line">{{quartier}}</span></div>
+          <div class="field f2"><span class="label">Code Postal :</span><span class="line">{{codePostal}}</span></div>
+          <div class="field f3"><span class="label">Ville :</span><span class="line">{{ville}}</span></div>
+        </div>
+        <div class="row">
+          <div class="field f2"><span class="label">ICE :</span><span class="line">{{ice}}</span></div>
+          <div class="field f2"><span class="label">Registre de Commerce :</span><span class="line">{{rc}}</span></div>
+          <div class="field f2"><span class="label">Taxe Professionnelle :</span><span class="line">{{patente}}</span></div>
+        </div>
+        <div class="row">
+          <div class="field f3"><span class="label">Nom(s) Beneficiaire(s) Effectif(s) :</span><span class="line">{{beneficiairesEffectifs}}</span></div>
+          <div class="field f15"><span class="label">CIN :</span><span class="line">{{cin}}</span></div>
+          <div class="field f15"><span class="label">Date de naissance :</span><span class="line">{{dateNaissance}}</span></div>
+          <div class="field f15"><span class="label">Nationalite :</span><span class="line">{{nationalite}}</span></div>
+        </div>
+      </div>
+
+      <div class="section-title">Point de vente</div>
+      <div class="block block-point-of-sale">
+        <div class="row">
+          <div class="field f4"><span class="label">Acronyme :</span><span class="line">{{enseigne}}</span></div>
+        </div>
+        <div class="row">
+          <div class="field f7"><span class="label">Adresse du point de vente :</span><span class="line">{{adresse}}</span></div>
+        </div>
+        <div class="row">
+          <div class="field f3"><span class="label">Quartier :</span><span class="line">{{quartier}}</span></div>
+          <div class="field f2"><span class="label">Code Postal :</span><span class="line">{{codePostal}}</span></div>
+          <div class="field f3"><span class="label">Ville :</span><span class="line">{{ville}}</span></div>
+        </div>
+        <div class="row">
+          <div class="field f3"><span class="label">Nom du representant legal :</span><span class="line">{{representantLegal}}</span></div>
+          <div class="field f15"><span class="label">Fonction :</span><span class="line">{{fonction}}</span></div>
+          <div class="field f15"><span class="label">CIN :</span><span class="line">{{cin}}</span></div>
+        </div>
+        <div class="row">
+          <div class="field f2"><span class="label">Telephone Fixe :</span><span class="line">{{telephoneFixe}}</span></div>
+          <div class="field f2"><span class="label">GSM :</span><span class="line">{{gsm}}</span></div>
+          <div class="field f3"><span class="label">E-mail d'envoi du releve :</span><span class="line">{{emailReleve}}</span></div>
+        </div>
+      </div>
+
+      <div class="section-title">Services LANA CASH</div>
+      <div class="block">
+        <div class="services-grid">
+          <span class="service-item"><span class="cb">{{serviceCreditVoucherCheck}}</span>Credit Voucher</span>
+          <span class="service-item"><span class="cb">{{servicePreAutorisationCartePresenteConfirmationManuelleCheck}}</span>Pre-autorisation Carte presente + confirmation manuelle *</span>
+          <span class="service-item"><span class="cb">{{serviceAnnulationCheck}}</span>Annulation</span>
+          <span class="service-item"><span class="cb">{{servicePreAutorisationManuelleConfirmationCartePresenteCheck}}</span>Pre-autorisation manuelle + confirmation carte presente *</span>
+          <span class="service-item"><span class="cb">{{serviceDccCheck}}</span>DCC</span>
+          <span class="service-item"><span class="cb">{{serviceTransactionManuelleCheck}}</span>Transaction manuelle *</span>
+          <span class="service-item"><span class="cb">{{servicePreAutorisationCartePresenteCheck}}</span>Pre-autorisation Carte presente</span>
+          <span class="service-item"><span class="cb">{{serviceTransactionManuelleSansCvvCheck}}</span>Transaction manuelle sans CVV *</span>
+        </div>
+        <div class="services-note">(*) Ces options necessitent l'accord de Lana Cash et la signature d'un contrat specifique</div>
+      </div>
+
+      <div class="section-title">Systemes acceptes par LANA CASH</div>
+      <div class="logos-box">
+        <div class="logos-row">
+          <span class="brand brand-cmi" aria-label="CMI">
+            <svg viewBox="0 0 110 40" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="CMI">
+              <text x="0" y="30" font-family="Arial Black, Arial, sans-serif" font-size="28" font-weight="900" letter-spacing="-1" fill="#e8001c">CMI</text>
+            </svg>
+          </span>
+          <span class="brand logo-jcb" aria-label="JCB"><span class="j">J</span><span class="c">C</span><span class="b">B</span></span>
+          <span class="brand brand-discover"><img src="{{discoverLogoUrl}}" alt="Discover" /></span>
+          <span class="brand"><img src="{{visaLogoUrl}}" alt="Visa" /></span>
+          <span class="brand"><img src="{{mastercardLogoUrl}}" alt="Mastercard" /></span>
+          <span class="brand brand-diner"><img src="{{dinerLogoUrl}}" alt="Diners Club International" /></span>
+          <span class="brand brand-unionpay"><img src="{{unionPayLogoUrl}}" alt="UnionPay" /></span>
+          <span class="brand brand-marocpay"><img src="{{marocPayLogoUrl}}" alt="Maroc Pay" /></span>
+        </div>
+      </div>
+
+      <div class="section-title">Equipements (reserve a Lana Cash)</div>
+      <div class="equip-box">
+        <div class="equip-grid">
+          <div class="equip-col">
+            <span class="equip-item"><span class="cb">{{typeTpeCheck}}</span>TPE autonome</span>
+            <span class="equip-item"><span class="cb">{{typeSoftposCheck}}</span>Soft Pos</span>
+            <span class="equip-item"><span class="cb">{{typeQrCheck}}</span>TPE centralise *</span>
+          </div>
+          <div class="equip-col">
+            <span class="equip-item"><span class="cb">&#160;</span>Monetique integree *</span>
+            <span class="equip-item"><span class="cb">&#160;</span>Grappe integree centralisee</span>
+          </div>
+          <div class="equip-col">
+            <span class="equip-item"><span class="cb">&#160;</span>Fixe</span>
+            <span class="equip-item"><span class="cb">&#160;</span>Mobile</span>
+            <span class="equip-item"><span class="cb">&#160;</span>PIN PAD</span>
+          </div>
+          <div class="equip-col">
+            <span class="equip-item"><span class="cb">&#160;</span>ADSL</span>
+            <span class="equip-item"><span class="cb">&#160;</span>4G/5G</span>
+            <span class="equip-item"><span class="cb">&#160;</span>WIFI</span>
+          </div>
+          <div class="equip-col">
+            <div class="equip-number field f2"><span class="label">Nombre :</span><span class="line">{{nombreTpe}}</span></div>
+          </div>
+        </div>
+        <div class="equip-note">* Condition financiere specifique</div>
+      </div>
+
+      <div class="section-title">Conditions tarifaires (cadre reserve a Lana Cash)</div>
+      <div class="pricing-box">
+        <div class="row">
+          <div class="field f3"><span class="label">Taux de commission - Carte marocaine (HT/TVA 10%) :</span><span class="line">{{commissionLocale}}</span></div>
+          <div class="field f2"><span class="label">Depot TPE :</span><span class="line">{{depotTpe}}</span></div>
+        </div>
+        <div class="row">
+          <div class="field f3"><span class="label">Taux de commission - Carte etrangere (HT/TVA 10%) :</span><span class="line">{{commissionEtrangere}}</span></div>
+          <div class="field f2"><span class="label">Prix d'achat TPE :</span><span class="line">{{prixAchatTpe}}</span></div>
+          <div class="field f2"><span class="label">Prix Licence :</span><span class="line">{{prixLicenceTpe}}</span></div>
+        </div>
+        <div class="package-row">
+          <span class="package-item"><span class="cb">{{packageDecouverteCheck}}</span>Abonnement Decouverte</span>
+          <span class="package-item"><span class="cb">{{packageEssentielCheck}}</span>Abonnement Essentiel</span>
+          <span class="package-item"><span class="cb">{{packagePremiumCheck}}</span>Abonnement Premium</span>
+        </div>
+      </div>
+
+      <div class="section-title">Compte de domiciliation bancaire</div>
+      <div class="rib-box">
+        <div class="rib-wrap">
+          <div class="rib-g rib-g-bank">
+            <div class="rib-cells">{{bankCodeCells}}</div>
+            <div class="rib-lbl">Code Banque</div>
+          </div>
+          <div class="rib-g rib-g-city">
+            <div class="rib-cells">{{cityCodeCells}}</div>
+            <div class="rib-lbl">Code Ville</div>
+          </div>
+          <div class="rib-g rib-g-account">
+            <div class="rib-cells">{{accountNumberCells}}</div>
+            <div class="rib-lbl">Numero de compte</div>
+          </div>
+          <div class="rib-g rib-g-key">
+            <div class="rib-cells">{{ribKeyCells}}</div>
+            <div class="rib-lbl">Cle RIB</div>
+          </div>
+          <div class="rib-g rib-g-currency">
+            <div class="rib-cells">{{currencyCells}}</div>
+            <div class="rib-lbl">Devise</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="legal">
+        Conformement a la loi n°09-08, vous disposez d'un droit d'acces, de rectification et d'opposition au traitement de vos donnees personnelles.<br />
+        Le traitement relatif a l'activite d'acquisition monetique a ete autorise par la CNDP sous N° d'autorisation en cours de delivrance.<br />
+        J'adhere par le present contrat au Systeme de Paiement sur TPE, propose par LANA CASH, aux Conditions Particulieres indiquees ci-dessus et reconnais avoir pris connaissance des Conditions Generales du Systeme de Paiement TPE et declare les accepter sans reserve.
+      </div>
+
+      <div class="fait-row">
+        <div class="field f3"><span class="label">Fait a,</span><span class="line">{{faitAVille}}</span></div>
+        <div class="field f2"><span class="label">Le,</span><span class="line">{{contractDate}}</span></div>
+      </div>
+
+      <div class="signatures">
+        <div class="sig-col">
+          <div class="sig-title">Cachet et Signature de l'adherent precedes de la mention "lu et approuve"</div>
+          <div class="sig-box"></div>
+          <div class="sig-meta">LANA CASH S.A. au capital de 60.000.000 Dirhams<br />3, Rue Abou Dhabi, Oasis - 20103 Casablanca - Maroc</div>
+        </div>
+        <div class="sig-col">
+          <div class="sig-title">Date et Signature Autorisee de LANA CASH</div>
+          <div class="sig-box"><div class="reserve-tag">Reserve a LANA CASH</div></div>
+          <div class="sig-meta" style="text-align:right;">RC 434127 - IF 27527045 - Patente 34750288 - CNSS 1563684 - ICE 002258990000045<br />Tel 0522 52 47 49 74 - www.lanacash.ma</div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
