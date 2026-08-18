@@ -37,6 +37,7 @@ public class ReclamationService {
     private final BackOfficeRepository  backOfficeRepository;
     private final DossierAffiliationRepository dossierAffiliationRepository;
     private final JwtService            jwtService;
+    private final ReclamationPdfService reclamationPdfService;
 
     public ReclamationService(
         ReclamationRepository reclamationRepository,
@@ -45,7 +46,8 @@ public class ReclamationService {
         UtilisateurRepository utilisateurRepository,
         BackOfficeRepository  backOfficeRepository,
         DossierAffiliationRepository dossierAffiliationRepository,
-        JwtService            jwtService
+        JwtService            jwtService,
+        ReclamationPdfService reclamationPdfService
     ) {
         this.reclamationRepository = reclamationRepository;
         this.commercantRepository  = commercantRepository;
@@ -54,6 +56,24 @@ public class ReclamationService {
         this.backOfficeRepository  = backOfficeRepository;
         this.dossierAffiliationRepository = dossierAffiliationRepository;
         this.jwtService            = jwtService;
+        this.reclamationPdfService = reclamationPdfService;
+    }
+
+    /**
+     * Fiche PDF imprimable d'UNE réclamation du commerçant connecté —
+     * demande explicite : "commerçant doit voir ses réclamations non
+     * traitées, l'avancement, l'historique, et pouvoir imprimer". Refuse
+     * l'accès (403) si la réclamation appartient à un autre commerçant —
+     * jamais de confiance sur l'id passé en paramètre, seul le JWT compte.
+     */
+    public ReclamationPdfService.Pdf genererPdfPourCommercant(String authHeader, Long id) {
+        commercant merchant = resolveCommercant(authHeader);
+        Reclamation r = reclamationRepository.findById(id)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Réclamation introuvable: " + id));
+        if (r.getCommercant() == null || !Objects.equals(r.getCommercant().getIdCommercant(), merchant.getIdCommercant())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Cette réclamation n'appartient pas à ce commerçant.");
+        }
+        return reclamationPdfService.genererDepuisEntite(r);
     }
 
     public ReclamationResponse createReclamation(String authHeader, ReclamationRequest req) {
@@ -84,6 +104,12 @@ public class ReclamationService {
         }
         if (req.tpeReference() != null && rec.getTpeReference() == null) {
             rec.setTpeReference(req.tpeReference());
+        }
+        // Set-once, meme logique que tpeReference : n'ecrase jamais un label
+        // deja pose par l'appel chatbot (agent/tools/ticket_tool.py) qui a
+        // pu enrichir cette meme ligne (dedup par referenceChat) avant cet appel.
+        if (req.resumeCourt() != null && rec.getResumeCourt() == null) {
+            rec.setResumeCourt(req.resumeCourt());
         }
 
         Reclamation saved = reclamationRepository.save(rec);
@@ -238,7 +264,8 @@ public class ReclamationService {
             resolveBackOfficeDisplayName(bo),
             bo != null ? bo.getIdBackOffice() : null,
             bo != null && bo.getUtilisateur() != null ? bo.getUtilisateur().getId() : null,
-            resolveDureeTraitementJours(r)
+            resolveDureeTraitementJours(r),
+            r.getResumeCourt()
         );
     }
 
@@ -381,7 +408,8 @@ public class ReclamationService {
             r.getCommentaire(),
             r.getTpe() != null ? r.getTpe().getNumeroSerie() : null,
             r.getTpe() != null ? r.getTpe().getModele()      : null,
-            r.getTpeReference()
+            r.getTpeReference(),
+            r.getResumeCourt()
         );
     }
 

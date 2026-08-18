@@ -21,6 +21,11 @@ public record MerchantSessionResponse(
     String tokenType,
     OffsetDateTime tokenExpiresAt,
     Summary summary,
+    // true si switch-monetique-service etait injoignable pendant la
+    // construction de cette session : summary.totalTpes/totalTransactions et
+    // les listes tpes/transactions ci-dessous sont alors partielles (voire a
+    // zero), pas le reflet reel du compte du commercant.
+    boolean donneesTransactionnellesIndisponibles,
     Profile profile,
     List<SubMerchantItem> sousCommercants,
     List<PdvItem> pdvs,
@@ -98,7 +103,8 @@ public record MerchantSessionResponse(
     }
 
     public record TransactionItem(
-        Long id,
+        String id,
+        String canal,
         String dateTransaction,
         String heureTransaction,
         BigDecimal montant,

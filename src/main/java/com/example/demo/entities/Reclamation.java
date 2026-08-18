@@ -49,6 +49,14 @@ public class Reclamation {
     // qu'en texte libre dans `commentaire`.
     private String tpeReference;
 
+    // Label court (2-4 mots) genere par le chatbot (agent/graph/nodes.py::
+    // _build_short_problem_label) a partir du type de probleme detecte et de
+    // la conversation — pour un tri/affichage rapide cote back-office, sans
+    // avoir a lire toute la `description`. Absent (null) pour les
+    // reclamations qui ne passent pas par le chatbot (creation manuelle
+    // eventuelle cote portail commercant).
+    private String resumeCourt;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "tpe_id")
     private tpe tpe;

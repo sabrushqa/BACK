@@ -40,7 +40,8 @@ class StaffDemoSeederTest {
             utilisateurRepository,
             commercialeRepository,
             backOfficeRepository,
-            passwordHashService
+            passwordHashService,
+            "Demo123!"
         );
     }
 

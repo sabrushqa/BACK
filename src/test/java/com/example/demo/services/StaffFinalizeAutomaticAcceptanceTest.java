@@ -31,8 +31,12 @@ import org.springframework.transaction.annotation.Transactional;
  * Exerce l'acceptation automatique d'un dossier (declenchee quand le
  * commerçant depose un contrat signe valide), pour un dossier standard
  * (activation de tous les PDV du commerçant) et pour une demande de
- * nouveau point de vente (activation du seul PDV demande + provisionnement
- * des TPE).
+ * nouveau point de vente (activation du seul PDV demande). Dans les deux
+ * cas, une reference TPE/SoftPOS/QR doit etre affectee MANUELLEMENT par le
+ * BOA (mail + notification DOSSIER_TPE_A_AFFECTER) — aucun terminal n'est
+ * plus auto-provisionne, y compris pour une demande d'extension (voir
+ * finalizeAutomaticAcceptance : l'ancien provisionRequestedTerminals
+ * contournait l'affectation reelle et ne prevenait jamais le BOA).
  */
 @SpringBootTest
 @Transactional
@@ -116,7 +120,7 @@ class StaffFinalizeAutomaticAcceptanceTest {
     }
 
     @Test
-    void acceptsNewPdvDossierAndProvisionsRequestedTerminals() {
+    void acceptsNewPdvDossierAndActivatesOnlyTheRequestedPdv() {
         utilisateur merchantUser = persistUser("merchant.finalize.newpdv@test.lanacash.ma", RoleUser.COMMERCANT);
         commercant commercant = new commercant();
         commercant.setNomCommercial("Boutique Finalize NewPdv");
@@ -148,11 +152,18 @@ class StaffFinalizeAutomaticAcceptanceTest {
         pdv reloadedPdv = pdvRepository.findById(pdvId).orElseThrow();
         assertThat(reloadedPdv.getStatut()).isEqualTo("ACTIF");
 
-        assertThat(tpeRepository.countByPdv_IdPDV(pdvId)).isEqualTo(2);
+        // Plus d'auto-provisionnement : aucun TPE ne doit exister tant que le
+        // BOA ne l'a pas reellement affecte (assignTpeToCommercant).
+        assertThat(tpeRepository.countByPdv_IdPDV(pdvId)).isZero();
     }
 
     @Test
-    void provisionsSoftposTerminalsWithExplicitModelAndConnection() {
+    void notifiesBackOfficeForTpeAssignmentOnNewPdvDossierInsteadOfAutoProvisioning() {
+        utilisateur boaUser = persistUser("boa.notify.newpdv@test.lanacash.ma", RoleUser.BACK_OFFICE);
+        back_office boa = new back_office();
+        boa.setUtilisateur(boaUser);
+        backOfficeRepository.save(boa);
+
         utilisateur merchantUser = persistUser("merchant.finalize.softpos@test.lanacash.ma", RoleUser.COMMERCANT);
         commercant commercant = new commercant();
         commercant.setNomCommercial("Boutique Finalize Softpos");
@@ -174,16 +185,52 @@ class StaffFinalizeAutomaticAcceptanceTest {
         dossier.setRequestedPdv(requestedPdv);
         dossier.setDateSoumission(LocalDate.now());
         dossier = dossierAffiliationRepository.save(dossier);
+        final Long dossierId = dossier.getIdDossier();
         final Long pdvId = requestedPdv.getIdPDV();
 
         staffAffiliationManagementService.finalizeAutomaticAcceptance(dossier);
 
-        com.example.demo.entities.tpe provisioned = tpeRepository.findAll().stream()
-            .filter(terminal -> pdvId.equals(terminal.getPdv().getIdPDV()))
-            .findFirst()
-            .orElseThrow();
-        assertThat(provisioned.getModele()).isEqualTo("SOFTPOS PRO");
-        assertThat(provisioned.getTypeConnexion()).isEqualTo("SOFTPOS PRO");
+        assertThat(tpeRepository.countByPdv_IdPDV(pdvId)).isZero();
+        assertThat(notificationsRepository.findAll())
+            .anyMatch(notification ->
+                notification.getUtilisateur().getId().equals(boaUser.getId())
+                    && notification.getTypeNotification() == TypeNotification.DOSSIER_TPE_A_AFFECTER
+                    && notification.getDossierId().equals(dossierId)
+            );
+    }
+
+    @Test
+    void notifiesBackOfficeForEcommerceOnlyNewPdvDossier() {
+        // Depuis assignEcommerceSiteToCommercant, E_COMMERCE a lui aussi besoin
+        // d'une affectation manuelle (site marchand a interfacer avec Switch) —
+        // ce dossier ne doit donc plus etre exclu de l'alerte BOA.
+        utilisateur boaUser = persistUser("boa.notify.newpdv.ecom@test.lanacash.ma", RoleUser.BACK_OFFICE);
+        back_office boa = new back_office();
+        boa.setUtilisateur(boaUser);
+        backOfficeRepository.save(boa);
+
+        utilisateur merchantUser = persistUser("merchant.finalize.newpdv.ecom@test.lanacash.ma", RoleUser.COMMERCANT);
+        commercant commercant = new commercant();
+        commercant.setNomCommercial("Boutique Finalize NewPdv Ecom");
+        commercant.setUtilisateur(merchantUser);
+        commercant = commercantRepository.save(commercant);
+
+        dossier_affiliation dossier = new dossier_affiliation();
+        dossier.setCommercant(commercant);
+        dossier.setStatus(StatusDossier.CONTRAT_A_SIGNER);
+        dossier.setTypeAffiliation(TypeAffiliation.E_COMMERCE);
+        dossier.setOrigineCreation("NOUVEAU_PDV");
+        dossier.setDateSoumission(LocalDate.now());
+        dossier = dossierAffiliationRepository.save(dossier);
+
+        staffAffiliationManagementService.finalizeAutomaticAcceptance(dossier);
+
+        assertThat(notificationsRepository.findAll())
+            .anyMatch(notification ->
+                notification.getUtilisateur().getId().equals(boaUser.getId())
+                    && notification.getTypeNotification() == TypeNotification.DOSSIER_TPE_A_AFFECTER
+                    && notification.getMessage().contains("site e-commerce")
+            );
     }
 
     @Test
@@ -216,7 +263,7 @@ class StaffFinalizeAutomaticAcceptanceTest {
     }
 
     @Test
-    void doesNotNotifyBackOfficeForEcommerceOnlyDossier() {
+    void notifiesBackOfficeForEcommerceOnlyDossier() {
         utilisateur boaUser = persistUser("boa.notify.ecommerce@test.lanacash.ma", RoleUser.BACK_OFFICE);
         back_office boa = new back_office();
         boa.setUtilisateur(boaUser);
@@ -238,7 +285,78 @@ class StaffFinalizeAutomaticAcceptanceTest {
         staffAffiliationManagementService.finalizeAutomaticAcceptance(dossier);
 
         assertThat(notificationsRepository.findAll())
-            .noneMatch(notification -> notification.getTypeNotification() == TypeNotification.DOSSIER_TPE_A_AFFECTER);
+            .anyMatch(notification ->
+                notification.getUtilisateur().getId().equals(boaUser.getId())
+                    && notification.getTypeNotification() == TypeNotification.DOSSIER_TPE_A_AFFECTER
+                    && notification.getMessage().contains("site e-commerce")
+            );
+    }
+
+    @Test
+    void notifiesBackOfficeForBothTpeAndEcommerceOnCombinedDossier() {
+        utilisateur boaUser = persistUser("boa.notify.combined@test.lanacash.ma", RoleUser.BACK_OFFICE);
+        back_office boa = new back_office();
+        boa.setUtilisateur(boaUser);
+        backOfficeRepository.save(boa);
+
+        utilisateur merchantUser = persistUser("merchant.notify.combined@test.lanacash.ma", RoleUser.COMMERCANT);
+        commercant commercant = new commercant();
+        commercant.setNomCommercial("Boutique Notify Combined");
+        commercant.setUtilisateur(merchantUser);
+        commercant = commercantRepository.save(commercant);
+
+        dossier_affiliation dossier = new dossier_affiliation();
+        dossier.setCommercant(commercant);
+        dossier.setStatus(StatusDossier.CONTRAT_A_SIGNER);
+        dossier.setTypeAffiliation(TypeAffiliation.ENCAISSEMENT_ET_ECOMMERCE);
+        dossier.setDateSoumission(LocalDate.now());
+        dossier = dossierAffiliationRepository.save(dossier);
+
+        staffAffiliationManagementService.finalizeAutomaticAcceptance(dossier);
+
+        assertThat(notificationsRepository.findAll())
+            .anyMatch(notification ->
+                notification.getUtilisateur().getId().equals(boaUser.getId())
+                    && notification.getTypeNotification() == TypeNotification.DOSSIER_TPE_A_AFFECTER
+                    && notification.getMessage().contains("TPE/SoftPOS/QR")
+                    && notification.getMessage().contains("site e-commerce")
+            );
+    }
+
+    @Test
+    void notifiesOnlyTheAssignedBackOfficeWhenTheDossierAlreadyHasOne() {
+        utilisateur assignedBoaUser = persistUser("boa.assigned.notify.tpe@test.lanacash.ma", RoleUser.BACK_OFFICE);
+        back_office assignedBoa = new back_office();
+        assignedBoa.setUtilisateur(assignedBoaUser);
+        assignedBoa = backOfficeRepository.save(assignedBoa);
+
+        utilisateur otherBoaUser = persistUser("boa.other.notify.tpe@test.lanacash.ma", RoleUser.BACK_OFFICE);
+        back_office otherBoa = new back_office();
+        otherBoa.setUtilisateur(otherBoaUser);
+        backOfficeRepository.save(otherBoa);
+
+        utilisateur merchantUser = persistUser("merchant.notify.assignedboa@test.lanacash.ma", RoleUser.COMMERCANT);
+        commercant commercant = new commercant();
+        commercant.setNomCommercial("Boutique Notify Assigned Boa");
+        commercant.setUtilisateur(merchantUser);
+        commercant = commercantRepository.save(commercant);
+
+        dossier_affiliation dossier = new dossier_affiliation();
+        dossier.setCommercant(commercant);
+        dossier.setBackOffice(assignedBoa);
+        dossier.setStatus(StatusDossier.CONTRAT_A_SIGNER);
+        dossier.setTypeAffiliation(TypeAffiliation.TPE);
+        dossier.setDateSoumission(LocalDate.now());
+        dossier = dossierAffiliationRepository.save(dossier);
+
+        staffAffiliationManagementService.finalizeAutomaticAcceptance(dossier);
+
+        assertThat(notificationsRepository.findAll())
+            .anyMatch(n -> n.getUtilisateur().getId().equals(assignedBoaUser.getId())
+                && n.getTypeNotification() == TypeNotification.DOSSIER_TPE_A_AFFECTER);
+        assertThat(notificationsRepository.findAll())
+            .noneMatch(n -> n.getUtilisateur().getId().equals(otherBoaUser.getId())
+                && n.getTypeNotification() == TypeNotification.DOSSIER_TPE_A_AFFECTER);
     }
 
     @Test

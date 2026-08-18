@@ -94,6 +94,13 @@ public class ChatbotReclamationController {
         if (req.tpeReference() != null && r.getTpeReference() == null) {
             r.setTpeReference(req.tpeReference());
         }
+        // Set-once comme tpeReference ci-dessus : le portail marchand
+        // (CommercantReclamationsPage.tsx) peut aussi enrichir cette meme
+        // ligne (dedup par referenceChat, voir commentaire plus haut) sans
+        // connaitre ce label — ne jamais l'ecraser avec null dans ce cas.
+        if (req.resumeCourt() != null && r.getResumeCourt() == null) {
+            r.setResumeCourt(req.resumeCourt());
+        }
 
         Reclamation saved = reclamationRepository.save(r);
 
@@ -110,7 +117,8 @@ public class ChatbotReclamationController {
                 saved.getCommentaire(),
                 saved.getTpe() != null ? saved.getTpe().getNumeroSerie() : null,
                 saved.getTpe() != null ? saved.getTpe().getModele()      : null,
-                saved.getTpeReference()
+                saved.getTpeReference(),
+                saved.getResumeCourt()
             )
         );
     }

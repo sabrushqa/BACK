@@ -1,6 +1,9 @@
 package com.example.demo.services;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.example.demo.dto.StaffAffiliationOverviewResponse;
 import com.example.demo.entities.back_office;
@@ -20,12 +23,15 @@ import com.example.demo.repositories.DossierAffiliationRepository;
 import com.example.demo.repositories.PdvRepository;
 import com.example.demo.repositories.UtilisateurRepository;
 import com.example.demo.security.TestJwtSupport;
+import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -63,6 +69,9 @@ class StaffAffiliationRequestItemMappingTest {
 
     @Autowired
     private PdvRepository pdvRepository;
+
+    @MockitoBean
+    private SwitchMonetiqueClient switchMonetiqueClient;
 
     private utilisateur persistUser(String email, RoleUser role) {
         utilisateur user = new utilisateur();
@@ -208,6 +217,8 @@ class StaffAffiliationRequestItemMappingTest {
         extension.setCompteRenduDateVisite("2026-07-01");
         dossierAffiliationRepository.save(extension);
 
+        when(switchMonetiqueClient.stockComplet()).thenReturn(List.of());
+
         StaffAffiliationOverviewResponse response = staffAffiliationManagementService.getRequests(
             "Bearer " + tokenFor(superviseur)
         );
@@ -230,5 +241,44 @@ class StaffAffiliationRequestItemMappingTest {
         assertThat(item.serviceDcc()).isTrue();
         assertThat(item.modeServiceEcommerce()).isEqualTo("SiteMarchand");
         assertThat(item.compteRenduQualification()).isEqualTo("Qualifie");
+    }
+
+    /**
+     * Avant le correctif, isTpeAlreadyFullyAssigned() appelait
+     * switchMonetiqueClient.stockComplet() UNE FOIS PAR DOSSIER pour calculer
+     * un simple booleen — avec des centaines de dossiers, autant de
+     * round-trips HTTP synchrones vers switch-monetique-service, la cause
+     * principale de lenteur de cet endpoint. Ce test prouve qu'un seul appel
+     * suffit desormais, quel que soit le nombre de dossiers a mapper.
+     */
+    @Test
+    void fetchesOracleTpeStockOnlyOnceRegardlessOfHowManyDossiersAreListed() {
+        utilisateur superviseur = persistUser("superviseur.mapping.oracleonce@test.lanacash.ma", RoleUser.SUPERVISEUR);
+
+        for (int i = 1; i <= 5; i++) {
+            utilisateur merchantUser = persistUser("commercant.mapping.oracleonce" + i + "@test.lanacash.ma", RoleUser.COMMERCANT);
+            commercant commercant = new commercant();
+            commercant.setUtilisateur(merchantUser);
+            commercant.setNomCommercial("Boutique Oracle Once " + i);
+            commercant = commercantRepository.save(commercant);
+
+            dossier_affiliation dossier = new dossier_affiliation();
+            dossier.setCommercant(commercant);
+            dossier.setStatus(StatusDossier.ACCEPTE);
+            dossier.setTypeAffiliation(TypeAffiliation.TPE);
+            dossier.setDateSoumission(LocalDate.now());
+            dossierAffiliationRepository.save(dossier);
+        }
+
+        when(switchMonetiqueClient.stockComplet()).thenReturn(List.of(
+            new SwitchMonetiqueClient.SwitchTpe(
+                "TPE-ORACLE-ONCE-1", "999999", "1",
+                "TPE", "4G", true, BigDecimal.ZERO, LocalDateTime.now()
+            )
+        ));
+
+        staffAffiliationManagementService.getRequests("Bearer " + tokenFor(superviseur));
+
+        verify(switchMonetiqueClient, times(1)).stockComplet();
     }
 }

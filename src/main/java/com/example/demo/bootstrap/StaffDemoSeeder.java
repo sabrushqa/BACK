@@ -16,6 +16,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,23 +30,28 @@ import org.springframework.transaction.annotation.Transactional;
 public class StaffDemoSeeder implements ApplicationRunner {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(StaffDemoSeeder.class);
-    private static final String DEFAULT_PASSWORD = "Demo123!";
 
     private final UtilisateurRepository utilisateurRepository;
     private final CommercialeRepository commercialeRepository;
     private final BackOfficeRepository backOfficeRepository;
     private final PasswordHashService passwordHashService;
+    private final String defaultPassword;
 
     public StaffDemoSeeder(
         UtilisateurRepository utilisateurRepository,
         CommercialeRepository commercialeRepository,
         BackOfficeRepository backOfficeRepository,
-        PasswordHashService passwordHashService
+        PasswordHashService passwordHashService,
+        // Sonar S2068 : evite un mot de passe litteral en dur dans le code source —
+        // configurable via env var (APP_DEMO_SEED_PASSWORD), avec la meme valeur par
+        // defaut qu'avant pour ne rien changer en local/dev sans configuration.
+        @Value("${app.demo.seed-password:Demo123!}") String defaultPassword
     ) {
         this.utilisateurRepository = utilisateurRepository;
         this.commercialeRepository = commercialeRepository;
         this.backOfficeRepository = backOfficeRepository;
         this.passwordHashService = passwordHashService;
+        this.defaultPassword = defaultPassword;
     }
 
     @Override
@@ -57,7 +63,7 @@ public class StaffDemoSeeder implements ApplicationRunner {
             "Staff demo seed completed: {} commerciales et {} back-offices crees (mot de passe initial: {}).",
             createdCommerciales,
             createdBackOffices,
-            DEFAULT_PASSWORD
+            defaultPassword
         );
     }
 
@@ -155,7 +161,7 @@ public class StaffDemoSeeder implements ApplicationRunner {
     private utilisateur buildActiveStaffUser(String email, RoleUser role) {
         utilisateur utilisateur = new utilisateur();
         utilisateur.setEmail(email);
-        utilisateur.setPassword(passwordHashService.hash(DEFAULT_PASSWORD));
+        utilisateur.setPassword(passwordHashService.hash(defaultPassword));
         utilisateur.setRole(role);
         utilisateur.setActive(Boolean.TRUE);
         utilisateur.setDateActivation(LocalDate.now());

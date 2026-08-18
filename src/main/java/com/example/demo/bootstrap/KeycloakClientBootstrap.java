@@ -1,6 +1,7 @@
 package com.example.demo.bootstrap;
 
 import com.example.demo.services.KeycloakAdminService;
+import com.example.demo.util.UrlUtils;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
@@ -65,7 +66,7 @@ public class KeycloakClientBootstrap implements ApplicationRunner {
     private List<String> resolveRedirectUris() {
         Set<String> uris = new LinkedHashSet<>(splitCsv(redirectUrisProperty));
         if (uris.isEmpty()) {
-            String base = stripTrailingSlash(frontendBaseUrl);
+            String base = UrlUtils.stripTrailingSlash(frontendBaseUrl);
             uris.add(base + "/*");
             uris.add(base + "/login");
             uris.add(base + "/forgot-password");
@@ -78,7 +79,7 @@ public class KeycloakClientBootstrap implements ApplicationRunner {
     private List<String> resolveWebOrigins() {
         List<String> origins = splitCsv(webOriginsProperty);
         if (origins.isEmpty()) {
-            return List.of(stripTrailingSlash(frontendBaseUrl));
+            return List.of(UrlUtils.stripTrailingSlash(frontendBaseUrl));
         }
         return origins;
     }
@@ -93,10 +94,4 @@ public class KeycloakClientBootstrap implements ApplicationRunner {
             .toList();
     }
 
-    private String stripTrailingSlash(String value) {
-        if (value == null) {
-            return "";
-        }
-        return value.replaceAll("/+$", "");
-    }
 }

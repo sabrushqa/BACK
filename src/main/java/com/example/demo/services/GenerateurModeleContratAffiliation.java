@@ -19,7 +19,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.util.Base64;
 import java.util.Locale;
 import java.util.Objects;
 import org.springframework.core.io.ClassPathResource;
@@ -47,19 +46,23 @@ public class GenerateurModeleContratAffiliation {
         PPRepository ppRepository,
         PMRepository pmRepository,
         AERepository aeRepository,
-        AssociationRepository associationRepository
+        AssociationRepository associationRepository,
+        PdfLogoProvider pdfLogoProvider
     ) {
         this.ppRepository = ppRepository;
         this.pmRepository = pmRepository;
         this.aeRepository = aeRepository;
         this.associationRepository = associationRepository;
-        this.lanaCashLogoDataUri = loadResourceAsDataUri("contrats/logo.png");
-        this.visaLogoDataUri = loadResourceAsDataUri("contrats/logos/visa.png");
-        this.mastercardLogoDataUri = loadResourceAsDataUri("contrats/logos/mastercard.png");
-        this.discoverLogoDataUri = loadResourceAsDataUri("contrats/logos/discover.png");
-        this.dinerLogoDataUri = loadResourceAsDataUri("contrats/logos/diner.png");
-        this.unionPayLogoDataUri = loadResourceAsDataUri("contrats/logos/unionpay.png");
-        this.marocPayLogoDataUri = loadResourceAsDataUri("contrats/logos/marocpay.png");
+        // Logos charges une seule fois pour toute l'application — voir
+        // PdfLogoProvider (avant : chargement/encodage base64 duplique ici,
+        // dans MerchantTicketService et dans ReclamationPdfService).
+        this.lanaCashLogoDataUri = pdfLogoProvider.lanaCash();
+        this.visaLogoDataUri = pdfLogoProvider.visa();
+        this.mastercardLogoDataUri = pdfLogoProvider.mastercard();
+        this.discoverLogoDataUri = pdfLogoProvider.discover();
+        this.dinerLogoDataUri = pdfLogoProvider.diner();
+        this.unionPayLogoDataUri = pdfLogoProvider.unionPay();
+        this.marocPayLogoDataUri = pdfLogoProvider.marocPay();
     }
 
     public String genererHtmlFicheAutoAffiliation(
@@ -1203,37 +1206,6 @@ public class GenerateurModeleContratAffiliation {
 
         int safeLength = Math.max(1, maxCharacters - 3);
         return trimmedValue.substring(0, safeLength).trim() + "...";
-    }
-
-    private String loadResourceAsDataUri(String classpathLocation) {
-        try {
-            ClassPathResource resource = new ClassPathResource(classpathLocation);
-            byte[] content = resource.getInputStream().readAllBytes();
-            String mediaType = resolveMediaType(classpathLocation);
-            return "data:" + mediaType + ";base64," + Base64.getEncoder().encodeToString(content);
-        } catch (IOException exception) {
-            return "";
-        }
-    }
-
-    private String resolveMediaType(String classpathLocation) {
-        String normalizedPath = Objects.requireNonNullElse(classpathLocation, "")
-            .toLowerCase(Locale.ROOT);
-
-        if (normalizedPath.endsWith(".png")) {
-            return "image/png";
-        }
-        if (normalizedPath.endsWith(".svg")) {
-            return "image/svg+xml";
-        }
-        if (normalizedPath.endsWith(".jpg") || normalizedPath.endsWith(".jpeg")) {
-            return "image/jpeg";
-        }
-        if (normalizedPath.endsWith(".webp")) {
-            return "image/webp";
-        }
-
-        return "application/octet-stream";
     }
 
     private String loadResourceAsString(String classpathLocation) {

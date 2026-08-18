@@ -115,7 +115,11 @@
         <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
-            <scope>test</scope>
+            <!-- runtime (pas test) : le profil "public" (application-public.properties,
+                 H2 en mémoire) doit pouvoir démarrer une vraie instance packagée/exécutée
+                 (mvn spring-boot:run, jar), pas seulement dans @SpringBootTest — utilisé en
+                 CI pour les tests E2E Playwright (pas de SQL Server disponible en CI). -->
+            <scope>runtime</scope>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>

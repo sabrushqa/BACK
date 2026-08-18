@@ -49,6 +49,7 @@ class ReclamationControllerTest {
     private MockMvcTester mvc;
     private utilisateur commercantAUser;
     private utilisateur commercantBUser;
+    private Reclamation reclamationDeA;
 
     @BeforeEach
     void setUp() {
@@ -64,14 +65,14 @@ class ReclamationControllerTest {
         commercantB.setUtilisateur(commercantBUser);
         commercantB = commercantRepository.save(commercantB);
 
-        Reclamation reclamationDeA = new Reclamation();
+        reclamationDeA = new Reclamation();
         reclamationDeA.setCommercant(commercantA);
         reclamationDeA.setTypeProbleme("CONNECTIVITE");
         reclamationDeA.setDescription("Probleme de connexion TPE");
         reclamationDeA.setStatut("EN_ATTENTE");
         reclamationDeA.setPriorite("HAUTE");
         reclamationDeA.setDateCreation(LocalDate.now());
-        reclamationRepository.save(reclamationDeA);
+        reclamationDeA = reclamationRepository.save(reclamationDeA);
     }
 
     private utilisateur persistUser(String email) {
@@ -136,5 +137,39 @@ class ReclamationControllerTest {
             .bodyJson()
             .extractingPath("$.typeProbleme")
             .isEqualTo("CONNECTIVITE");
+    }
+
+    @Test
+    void ownerCanDownloadPdf() {
+        mvc.perform(
+            MockMvcRequestBuilders.get("/api/merchant/reclamations/" + reclamationDeA.getIdReclamation() + "/pdf")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(commercantAUser))
+        )
+            .assertThat()
+            .hasStatus(HttpStatus.OK)
+            .hasHeader(HttpHeaders.CONTENT_TYPE, org.springframework.http.MediaType.APPLICATION_PDF_VALUE);
+    }
+
+    @Test
+    void otherMerchantCannotDownloadPdf() {
+        mvc.perform(
+            MockMvcRequestBuilders.get("/api/merchant/reclamations/" + reclamationDeA.getIdReclamation() + "/pdf")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(commercantBUser))
+        ).assertThat().hasStatus(HttpStatus.FORBIDDEN);
+    }
+
+    @Test
+    void rejectsPdfDownloadWithoutAuthentication() {
+        mvc.perform(
+            MockMvcRequestBuilders.get("/api/merchant/reclamations/" + reclamationDeA.getIdReclamation() + "/pdf")
+        ).assertThat().hasStatus(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
+    void returnsNotFoundForUnknownReclamationPdf() {
+        mvc.perform(
+            MockMvcRequestBuilders.get("/api/merchant/reclamations/999999/pdf")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(commercantAUser))
+        ).assertThat().hasStatus(HttpStatus.NOT_FOUND);
     }
 }

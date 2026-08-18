@@ -51,7 +51,8 @@ class AffiliationDemoSeederTest {
             backOfficeRepository,
             passwordHashService,
             count,
-            emailPrefix
+            emailPrefix,
+            "SeedDemo123!"
         );
     }
 
@@ -71,7 +72,8 @@ class AffiliationDemoSeederTest {
             utilisateurRepository,
             commercialeRepository,
             backOfficeRepository,
-            passwordHashService
+            passwordHashService,
+            "Demo123!"
         ).run(null);
 
         AffiliationDemoSeeder seeder = buildSeeder(30, "seed.affiliation.withstaff");

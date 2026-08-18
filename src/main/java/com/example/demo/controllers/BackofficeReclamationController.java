@@ -2,10 +2,15 @@ package com.example.demo.controllers;
 
 import com.example.demo.dto.BackofficeReclamationResponse;
 import com.example.demo.dto.ReclamationDashboardResponse;
+import com.example.demo.services.ReclamationPdfService;
 import com.example.demo.services.ReclamationService;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -32,9 +37,14 @@ import org.springframework.web.bind.annotation.RestController;
 public class BackofficeReclamationController {
 
     private final ReclamationService reclamationService;
+    private final ReclamationPdfService reclamationPdfService;
 
-    public BackofficeReclamationController(ReclamationService reclamationService) {
+    public BackofficeReclamationController(
+        ReclamationService reclamationService,
+        ReclamationPdfService reclamationPdfService
+    ) {
         this.reclamationService = reclamationService;
+        this.reclamationPdfService = reclamationPdfService;
     }
 
     /** Liste toutes les réclamations, avec filtres optionnels. */
@@ -80,5 +90,30 @@ public class BackofficeReclamationController {
             return ResponseEntity.badRequest().build();
         }
         return ResponseEntity.ok(reclamationService.updateStatut(authorizationHeader, id, newStatut));
+    }
+
+    /**
+     * Fiche PDF imprimable/téléchargeable d'une réclamation (accès BOA :
+     * SUPERVISEUR ou BACK_OFFICE — voir ReclamationPdfService). Affiche en
+     * une page la description reformulée par le chatbot, le diagnostic
+     * technique et le contexte commerçant/TPE.
+     */
+    @GetMapping("/{id}/pdf")
+    public ResponseEntity<ByteArrayResource> pdf(
+        @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader,
+        @PathVariable Long id
+    ) {
+        ReclamationPdfService.Pdf pdf = reclamationPdfService.genererFiche(authorizationHeader, id);
+        return ResponseEntity.ok()
+            .contentType(MediaType.APPLICATION_PDF)
+            .header(
+                HttpHeaders.CONTENT_DISPOSITION,
+                ContentDisposition
+                    .inline()
+                    .filename(pdf.nomFichier(), StandardCharsets.UTF_8)
+                    .build()
+                    .toString()
+            )
+            .body(new ByteArrayResource(pdf.contenu()));
     }
 }

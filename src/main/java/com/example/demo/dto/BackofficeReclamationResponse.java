@@ -25,5 +25,7 @@ public record BackofficeReclamationResponse(
     String    backOfficeTraitant,
     Long      backOfficeId,
     Long      backOfficeUtilisateurId,
-    Long      dureeTraitementJours
+    Long      dureeTraitementJours,
+    // Label court genere par le chatbot — voir entities/Reclamation.java::resumeCourt.
+    String    resumeCourt
 ) {}

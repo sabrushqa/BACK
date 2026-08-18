@@ -11,6 +11,10 @@ public interface DocumentsRepository extends JpaRepository<documents, Long> {
         Long dossierId
     );
 
+    List<documents> findAllByDossierAffiliation_IdDossierInOrderByDateUploadDescIdDocumentDesc(
+        List<Long> dossierIds
+    );
+
     Optional<documents> findByIdDocumentAndDossierAffiliation_IdDossier(
         Long documentId,
         Long dossierId

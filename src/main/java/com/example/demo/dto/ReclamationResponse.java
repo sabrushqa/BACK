@@ -18,5 +18,7 @@ public record ReclamationResponse(
     // (TPE affecte cote Oracle, sans ligne locale correspondante) — voir
     // entities/Reclamation.java::tpeReference. Repli d'affichage cote UI
     // quand tpeNumeroSerie est absent.
-    String    tpeReference
+    String    tpeReference,
+    // Label court genere par le chatbot — voir entities/Reclamation.java::resumeCourt.
+    String    resumeCourt
 ) {}

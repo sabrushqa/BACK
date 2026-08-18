@@ -5,9 +5,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.example.demo.entities.commercant;
 import com.example.demo.entities.documents;
 import com.example.demo.entities.dossier_affiliation;
+import com.example.demo.entities.pdv;
 import com.example.demo.entities.utilisateur;
 import com.example.demo.enums.RoleUser;
 import com.example.demo.enums.StatusDocument;
+import com.example.demo.enums.StatusDossier;
 import com.example.demo.enums.TypeAffiliation;
 import com.example.demo.enums.TypeDocument;
 import com.example.demo.repositories.CommercantRepository;
@@ -48,6 +50,9 @@ class StaffDossierDownloadsTest {
 
     @Autowired
     private DocumentsRepository documentsRepository;
+
+    @Autowired
+    private com.example.demo.repositories.PdvRepository pdvRepository;
 
     private utilisateur persistUser(String email, RoleUser role) {
         utilisateur user = new utilisateur();
@@ -220,5 +225,92 @@ class StaffDossierDownloadsTest {
 
         assertThat(download.content()).isNotEmpty();
         assertThat(download.fileName()).contains("complet");
+    }
+
+    @Test
+    void fullDossierIncludesTheContractOfAnApprovedExtensionRequest() {
+        utilisateur superviseur = persistUser("superviseur.download.withextension@test.lanacash.ma", RoleUser.SUPERVISEUR);
+
+        commercant commercant = new commercant();
+        commercant.setNomCommercial("Boutique Extension Download Test");
+        commercant = commercantRepository.save(commercant);
+
+        dossier_affiliation dossierPrincipal = new dossier_affiliation();
+        dossierPrincipal.setCommercant(commercant);
+        dossierPrincipal.setTypeAffiliation(TypeAffiliation.TPE);
+        dossierPrincipal.setRib("007123456789012345678901");
+        dossierPrincipal.setDateSoumission(LocalDate.now());
+        dossierPrincipal = dossierAffiliationRepository.save(dossierPrincipal);
+
+        var downloadSansExtension = staffAffiliationManagementService.downloadFullDossier(
+            "Bearer " + tokenFor(superviseur),
+            dossierPrincipal.getIdDossier()
+        );
+
+        pdv nouveauPdv = new pdv();
+        nouveauPdv.setCommercant(commercant);
+        nouveauPdv.setNomPDV("Nouveau PDV Extension");
+        nouveauPdv.setStatut("ACTIF");
+        nouveauPdv = pdvRepository.save(nouveauPdv);
+
+        dossier_affiliation extension = new dossier_affiliation();
+        extension.setCommercant(commercant);
+        extension.setTypeAffiliation(TypeAffiliation.TPE);
+        extension.setOrigineCreation("NOUVEAU_PDV");
+        extension.setStatus(StatusDossier.ACCEPTE);
+        extension.setRequestedPdv(nouveauPdv);
+        extension.setDateSoumission(LocalDate.now());
+        extension = dossierAffiliationRepository.save(extension);
+
+        ServiceDocumentContratAffiliation.ContratGenere extensionContract =
+            serviceDocumentContratAffiliation.genererContrat(extension);
+        extension.setGeneratedContractPath(extensionContract.cheminStocke());
+        extension.setGeneratedContractFileName(extensionContract.nomFichier());
+        dossierAffiliationRepository.save(extension);
+
+        var downloadAvecExtension = staffAffiliationManagementService.downloadFullDossier(
+            "Bearer " + tokenFor(superviseur),
+            dossierPrincipal.getIdDossier()
+        );
+
+        assertThat(downloadAvecExtension.content()).isNotEmpty();
+        // Le contrat de l'extension approuvee est fusionne en plus du dossier
+        // principal : le PDF resultant est forcement plus volumineux.
+        assertThat(downloadAvecExtension.content().length).isGreaterThan(downloadSansExtension.content().length);
+    }
+
+    @Test
+    void fullDossierIncludesTheSignedContractOnTopOfTheGeneratedOne() {
+        utilisateur superviseur = persistUser("superviseur.download.withsigned@test.lanacash.ma", RoleUser.SUPERVISEUR);
+
+        commercant commercant = new commercant();
+        commercant.setNomCommercial("Boutique Signed In Full Download Test");
+        commercant = commercantRepository.save(commercant);
+
+        dossier_affiliation dossier = new dossier_affiliation();
+        dossier.setCommercant(commercant);
+        dossier.setTypeAffiliation(TypeAffiliation.TPE);
+        dossier.setRib("007123456789012345678901");
+        dossier.setDateSoumission(LocalDate.now());
+        dossier = dossierAffiliationRepository.save(dossier);
+
+        var downloadSansSignature = staffAffiliationManagementService.downloadFullDossier(
+            "Bearer " + tokenFor(superviseur),
+            dossier.getIdDossier()
+        );
+
+        ServiceDocumentContratAffiliation.ContratGenere signed =
+            serviceDocumentContratAffiliation.genererContrat(dossier);
+        dossier.setSignedContractPath(signed.cheminStocke());
+        dossier.setSignedContractFileName(signed.nomFichier());
+        dossierAffiliationRepository.save(dossier);
+
+        var downloadAvecSignature = staffAffiliationManagementService.downloadFullDossier(
+            "Bearer " + tokenFor(superviseur),
+            dossier.getIdDossier()
+        );
+
+        assertThat(downloadAvecSignature.content()).isNotEmpty();
+        assertThat(downloadAvecSignature.content().length).isGreaterThan(downloadSansSignature.content().length);
     }
 }

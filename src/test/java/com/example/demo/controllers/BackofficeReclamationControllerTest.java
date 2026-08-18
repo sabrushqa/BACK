@@ -175,4 +175,63 @@ class BackofficeReclamationControllerTest {
                 .content("{}")
         ).assertThat().hasStatus(HttpStatus.BAD_REQUEST);
     }
+
+    @Test
+    void generatesPdfForSupervisor() {
+        utilisateur superviseur = persistUser("superviseur.reclamation.pdf@test.lanacash.ma", RoleUser.SUPERVISEUR);
+        Reclamation reclamation = newReclamation("EN_ATTENTE", "HAUTE", "MATERIEL");
+        reclamation.setResumeCourt("Panne matérielle");
+        reclamation.setCommentaire("Diagnostic technique detaille.");
+        reclamationRepository.save(reclamation);
+
+        mvc.perform(
+            MockMvcRequestBuilders.get("/api/backoffice/reclamations/" + reclamation.getIdReclamation() + "/pdf")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(superviseur))
+        )
+            .assertThat()
+            .hasStatus(HttpStatus.OK)
+            .hasHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_PDF_VALUE);
+    }
+
+    @Test
+    void generatesPdfForBackOfficeStaff() {
+        utilisateur backOfficeUser = persistUser("bo.reclamation.pdf@test.lanacash.ma", RoleUser.BACK_OFFICE);
+        Reclamation reclamation = newReclamation("EN_ATTENTE", "MOYENNE", "CONNECTIVITE");
+
+        mvc.perform(
+            MockMvcRequestBuilders.get("/api/backoffice/reclamations/" + reclamation.getIdReclamation() + "/pdf")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(backOfficeUser))
+        ).assertThat().hasStatus(HttpStatus.OK);
+    }
+
+    @Test
+    void rejectsPdfWithoutToken() {
+        Reclamation reclamation = newReclamation("EN_ATTENTE", "MOYENNE", "AUTRE");
+
+        mvc.perform(
+            MockMvcRequestBuilders.get("/api/backoffice/reclamations/" + reclamation.getIdReclamation() + "/pdf")
+        ).assertThat().hasStatus(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
+    void rejectsPdfForNonStaffRole() {
+        utilisateur commercantUser = persistUser("commercant.reclamation.pdf@test.lanacash.ma", RoleUser.COMMERCANT);
+        Reclamation reclamation = newReclamation("EN_ATTENTE", "MOYENNE", "AUTRE");
+
+        mvc.perform(
+            MockMvcRequestBuilders.get("/api/backoffice/reclamations/" + reclamation.getIdReclamation() + "/pdf")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(commercantUser))
+        ).assertThat().hasStatus(HttpStatus.FORBIDDEN);
+    }
+
+    @Test
+    void returnsNotFoundForUnknownReclamationPdf() {
+        utilisateur superviseur =
+            persistUser("superviseur.reclamation.pdf.notfound@test.lanacash.ma", RoleUser.SUPERVISEUR);
+
+        mvc.perform(
+            MockMvcRequestBuilders.get("/api/backoffice/reclamations/999999/pdf")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(superviseur))
+        ).assertThat().hasStatus(HttpStatus.NOT_FOUND);
+    }
 }

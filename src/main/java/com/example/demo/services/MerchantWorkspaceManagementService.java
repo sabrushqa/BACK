@@ -55,6 +55,7 @@ public class MerchantWorkspaceManagementService {
     private final JwtService jwtService;
     private final KeycloakAdminService keycloakAdminService;
     private final GeocodingService geocodingService;
+    private final SupervisorNotificationService supervisorNotificationService;
     private final long activationExpirationMinutes;
 
     public MerchantWorkspaceManagementService(
@@ -70,6 +71,7 @@ public class MerchantWorkspaceManagementService {
         JwtService jwtService,
         KeycloakAdminService keycloakAdminService,
         GeocodingService geocodingService,
+        SupervisorNotificationService supervisorNotificationService,
         @Value("${app.auth.activation-expiration-minutes:60}") long activationExpirationMinutes
     ) {
         this.utilisateurRepository = utilisateurRepository;
@@ -84,6 +86,7 @@ public class MerchantWorkspaceManagementService {
         this.jwtService = jwtService;
         this.keycloakAdminService = keycloakAdminService;
         this.geocodingService = geocodingService;
+        this.supervisorNotificationService = supervisorNotificationService;
         this.activationExpirationMinutes = activationExpirationMinutes;
     }
 
@@ -107,35 +110,38 @@ public class MerchantWorkspaceManagementService {
             throw new IllegalArgumentException("Le point de vente est obligatoire.");
         }
 
-        boolean isEcommerce = resolveWorkspaceTypeAffiliation(commercant) == TypeAffiliation.E_COMMERCE;
-
-        pdv pointVente = null;
-        String canalEcommerce = null;
-        if (isEcommerce) {
-            canalEcommerce = normalize(request.canalEcommerce());
-            if (!"SITE_MARCHAND".equals(canalEcommerce) && !"APPLICATION_MOBILE".equals(canalEcommerce)) {
-                throw new IllegalArgumentException(
-                    "Le canal (site marchand ou application mobile) est obligatoire."
-                );
-            }
-        } else {
-            if (request.pdvId() == null) {
-                throw new IllegalArgumentException("Le point de vente est obligatoire.");
-            }
-
-            pointVente = pdvRepository
-                .findById(request.pdvId())
-                .filter((pdv) -> pdv.getCommercant() != null
-                    && Objects.equals(pdv.getCommercant().getIdCommercant(), commercant.getIdCommercant()))
-                .orElseThrow(
-                    () -> new IllegalArgumentException("Le point de vente sélectionné est introuvable.")
-                );
-
-            if (pointVente.getSousCommercant() != null) {
-                throw new IllegalArgumentException("Ce point de vente est déjà affecté à un sous-commerçant.");
-            }
-            validateAssignablePdv(pointVente);
+        TypeAffiliation workspaceTypeAffiliation = resolveWorkspaceTypeAffiliation(commercant);
+        // La creation de sous-commercant n'est disponible que pour le canal
+        // encaissement (TPE) : ni pour un commercant e-commerce pur, ni pour le
+        // cote e-commerce d'un commercant a affiliation combinee (cf. switcher
+        // "Compte Encaissement"/"Compte E-commerce" du frontend, qui envoie
+        // canalEcommerce sans pdvId quand l'espace E-commerce est actif).
+        boolean requestsEcommerceChannel = request.canalEcommerce() != null && request.pdvId() == null;
+        boolean isPureEcommerce = workspaceTypeAffiliation == TypeAffiliation.E_COMMERCE;
+        boolean isCombinedRequestingEcommerce = workspaceTypeAffiliation == TypeAffiliation.ENCAISSEMENT_ET_ECOMMERCE
+            && requestsEcommerceChannel;
+        if (isPureEcommerce || isCombinedRequestingEcommerce) {
+            throw new IllegalArgumentException(
+                "La création de sous-commerçants n'est pas disponible pour le canal e-commerce."
+            );
         }
+
+        if (request.pdvId() == null) {
+            throw new IllegalArgumentException("Le point de vente est obligatoire.");
+        }
+
+        pdv pointVente = pdvRepository
+            .findById(request.pdvId())
+            .filter((pdv) -> pdv.getCommercant() != null
+                && Objects.equals(pdv.getCommercant().getIdCommercant(), commercant.getIdCommercant()))
+            .orElseThrow(
+                () -> new IllegalArgumentException("Le point de vente sélectionné est introuvable.")
+            );
+
+        if (pointVente.getSousCommercant() != null) {
+            throw new IllegalArgumentException("Ce point de vente est déjà affecté à un sous-commerçant.");
+        }
+        validateAssignablePdv(pointVente);
 
         requireText(request.nom(), "Le nom du sous-commerçant est obligatoire.");
         requireText(request.prenom(), "Le prénom du sous-commerçant est obligatoire.");
@@ -178,16 +184,10 @@ public class MerchantWorkspaceManagementService {
         sousCommercant.setDateAffectation(LocalDate.now());
         sousCommercant.setStatut("EN_ATTENTE");
         sousCommercant.setUtilisateur(subMerchantUser);
-        if (isEcommerce) {
-            sousCommercant.setCommercant(commercant);
-            sousCommercant.setCanalEcommerce(canalEcommerce);
-        }
         sousCommercant = sousCommercantRepository.save(sousCommercant);
 
-        if (!isEcommerce) {
-            pointVente.setSousCommercant(sousCommercant);
-            pdvRepository.save(pointVente);
-        }
+        pointVente.setSousCommercant(sousCommercant);
+        pdvRepository.save(pointVente);
 
         ActivationMailService.MailDispatchResult mailResult = activationMailService.sendAccountSetupEmail(
             subMerchantUser,
@@ -198,9 +198,7 @@ public class MerchantWorkspaceManagementService {
 
         return new MerchantSubMerchantCreateResponse(
             sousCommercant.getIdSousCommercant(),
-            isEcommerce
-                ? "Le sous-commerçant a été créé et rattaché au canal sélectionné."
-                : "Le sous-commerçant a été créé et affecté au point de vente.",
+            "Le sous-commerçant a été créé et affecté au point de vente.",
             mailResult.sent(),
             mailResult.message()
         );
@@ -249,9 +247,8 @@ public class MerchantWorkspaceManagementService {
         TypeAffiliation currentAffiliationType = principalDossier.getTypeAffiliation();
         if (!isCompatibleAugmentationType(currentAffiliationType, typeAffiliation)) {
             throw new IllegalArgumentException(
-                "Cette demande doit rester compatible avec votre affiliation actuelle: "
-                    + resolveAffiliationFamilyLabel(currentAffiliationType)
-                    + "."
+                "Une demande d'extension ajoute un seul canal a la fois : "
+                    + "TPE, SoftPOS, QR Code ou e-commerce."
             );
         }
 
@@ -265,6 +262,19 @@ public class MerchantWorkspaceManagementService {
             requireText(request.modeServiceEcommerce(), "Le mode de service e-commerce est obligatoire.");
             if (!StringUtils.hasText(request.siteMarchandUrl()) && !StringUtils.hasText(request.applicationMobile())) {
                 throw new IllegalArgumentException("Le site marchand ou l'application mobile est obligatoire.");
+            }
+        } else if (request.existingPdvId() != null) {
+            // Le commercant ajoute des terminaux sur un point de vente qu'il
+            // possede DEJA (ex: plus de TPE sur une boutique existante), au
+            // lieu d'ouvrir un nouveau point de vente — aucune information
+            // d'adresse a redemander, le PDV existe deja.
+            pointVente = pdvRepository.findById(request.existingPdvId())
+                .orElseThrow(() -> new IllegalArgumentException("Point de vente introuvable."));
+            if (
+                pointVente.getCommercant() == null
+                    || !Objects.equals(pointVente.getCommercant().getIdCommercant(), commercant.getIdCommercant())
+            ) {
+                throw new IllegalArgumentException("Ce point de vente ne vous appartient pas.");
             }
         } else {
             requireText(request.nom(), "Le nom du point de vente est obligatoire.");
@@ -309,6 +319,7 @@ public class MerchantWorkspaceManagementService {
         dossier.setCommerciale(principalDossier.getCommerciale());
         dossier.setBackOffice(principalDossier.getBackOffice());
         dossier.setRequestedPdv(pointVente);
+        dossier.setRequestedPdvDejaExistant(!isEcommerce && request.existingPdvId() != null);
         // Reused for both flows: MerchantAccessService.resolveWorkspaceDossier
         // excludes any "NOUVEAU_PDV" dossier so an extension request (physical
         // PDV or e-commerce channel) never overrides the merchant's reference
@@ -326,6 +337,18 @@ public class MerchantWorkspaceManagementService {
         dossier.setSiteMarchandUrl(normalize(request.siteMarchandUrl()));
         dossier.setApplicationMobile(normalize(request.applicationMobile()));
         dossierAffiliationRepository.save(dossier);
+
+        // Continuite d'affectation (dossier.commerciale/backOffice deja repris du
+        // dossier principal ci-dessus) : encore faut-il que ces deux personnes
+        // apprennent qu'une nouvelle demande vient d'atterrir dans leur file —
+        // sans notification ici, seule une recherche manuelle dans "Demande
+        // d'extension" la revelait.
+        supervisorNotificationService.notifyNewExtensionRequest(
+            dossier,
+            commercant,
+            dossier.getCommerciale(),
+            dossier.getBackOffice()
+        );
 
         return new SupervisorActionResponse(
             isEcommerce
@@ -632,19 +655,28 @@ public class MerchantWorkspaceManagementService {
         return dossier != null && "NOUVEAU_PDV".equalsIgnoreCase(normalize(dossier.getOrigineCreation()));
     }
 
+    /**
+     * Un canal supplementaire — TPE/SoftPOS/QR Code physique OU e-commerce —
+     * peut toujours etre demande en extension, quelle que soit l'affiliation
+     * initiale : un commercant deja e-commerce doit pouvoir ajouter un TPE
+     * (et inversement, un commercant TPE doit pouvoir ajouter l'e-commerce,
+     * cas typique d'un dossier qui devient de facto "Encaissement et
+     * E-commerce" via deux dossiers distincts plutot qu'un seul combine).
+     * Avant ce correctif, un commercant E_COMMERCE ne pouvait jamais demander
+     * de TPE/SoftPOS/QR, et un commercant TPE/SoftPOS ne pouvait jamais
+     * demander l'e-commerce ni meme un QR Code (type absent de la liste
+     * autorisee) — la seule restriction utile est d'exclure le type combine
+     * ENCAISSEMENT_ET_ECOMMERCE lui-meme d'une demande d'extension : on
+     * ajoute UN canal a la fois, pas les deux en une seule demande.
+     */
     private boolean isCompatibleAugmentationType(
         TypeAffiliation currentAffiliationType,
         TypeAffiliation requestedAffiliationType
     ) {
-        if (currentAffiliationType == TypeAffiliation.E_COMMERCE) {
-            return requestedAffiliationType == TypeAffiliation.E_COMMERCE;
-        }
         return requestedAffiliationType == TypeAffiliation.TPE
-            || requestedAffiliationType == TypeAffiliation.SOFTPOS;
-    }
-
-    private String resolveAffiliationFamilyLabel(TypeAffiliation typeAffiliation) {
-        return typeAffiliation == TypeAffiliation.E_COMMERCE ? "E_COMMERCE" : "ENCAISSEMENT";
+            || requestedAffiliationType == TypeAffiliation.SOFTPOS
+            || requestedAffiliationType == TypeAffiliation.QR_CODE
+            || requestedAffiliationType == TypeAffiliation.E_COMMERCE;
     }
 
     private Integer parseOptionalInteger(String value) {

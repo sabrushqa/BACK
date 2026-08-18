@@ -4,6 +4,7 @@ import com.example.demo.enums.TypeAffiliation;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.text.Normalizer;
 import java.util.List;
 import javax.imageio.ImageIO;
 import org.apache.pdfbox.pdmodel.PDDocument;
@@ -42,13 +43,15 @@ public class ContratSignatureDetector {
         "cachet et signature de l'adhérent"
     );
 
-    // Zone adhérent (bas-gauche) exprimée en fraction de la page – template LANA CASH
-    // Y_START à 0.85 pour sauter le libellé imprimé "Cachet et Signature de l'adhérent..."
-    // qui occupe ~0.80-0.84 et génère ~6 % de pixels foncés à lui seul.
-    private static final double ZONE_X_START = 0.02;
-    private static final double ZONE_X_END   = 0.42;
-    private static final double ZONE_Y_START = 0.85;
-    private static final double ZONE_Y_END   = 0.93;
+    // Intérieur du rectangle de signature adhérent (bas-gauche), exprimé en
+    // fraction de la page. Ne jamais inclure le libellé imprimé ni les bordures :
+    // sur le vrai PDF généré, l'ancienne zone Y=0.85..0.93 contenait le texte
+    // "Cachet et Signature..." et produisait 3 % de pixels foncés dans un contrat
+    // totalement vierge, au-dessus du seuil de validation de 1 %.
+    private static final double ZONE_X_START = 0.055;
+    private static final double ZONE_X_END   = 0.48;
+    private static final double ZONE_Y_START = 0.885;
+    private static final double ZONE_Y_END   = 0.925;
 
     // Un pixel est considéré "foncé" si sa luminosité moyenne < ce seuil (0-255)
     private static final int BRIGHTNESS_THRESHOLD = 100;
@@ -112,7 +115,8 @@ public class ContratSignatureDetector {
     /**
      * Retourne {@code true} si la zone signature adhérent semble remplie.
      * Appeler estFichierContratLanaCash avant cette méthode.
-     * En cas d'erreur d'analyse, accepte le fichier pour ne pas bloquer un contrat valide.
+     * En cas d'erreur d'analyse, refuse le fichier. Une erreur technique ne doit jamais
+     * débloquer automatiquement l'espace commerçant (principe fail-closed).
      *
      * Equivalent a {@code estZoneSignatureRemplie(file, 1)} : ne verifie qu'une seule
      * section signee (usage: previsualisation avant depot, sans connaitre le dossier).
@@ -146,16 +150,19 @@ public class ContratSignatureDetector {
             }
             return analyserImage(bytes);
         } catch (Exception exception) {
-            LOGGER.warn("Analyse de signature impossible, le fichier est accepté par défaut.", exception);
-            return true;
+            LOGGER.warn("Analyse de signature impossible, le fichier est refusé par sécurité.", exception);
+            return false;
         }
     }
 
     private boolean analyserPdf(byte[] bytes, int expectedSignedSections) throws IOException {
         try (PDDocument document = PDDocument.load(bytes)) {
+            // La simple présence d'un dictionnaire /Sig n'est pas une preuve : il peut être
+            // vide, auto-signé, expiré ou ne couvrir qu'une partie du document. Tant qu'une
+            // validation cryptographique complète (certificat + chaîne + horodatage + byte
+            // range) n'est pas branchée, le PDF suit le même contrôle strict que les scans.
             if (!document.getSignatureDictionaries().isEmpty()) {
-                LOGGER.info("Signature numérique PDF détectée – contrat accepté.");
-                return true;
+                LOGGER.info("Objet de signature PDF présent ; validation visuelle des sections maintenue.");
             }
 
             int pageCount = document.getNumberOfPages();
@@ -164,23 +171,42 @@ public class ContratSignatureDetector {
             }
 
             PDFRenderer renderer = new PDFRenderer(document);
-            int pagesSignees = 0;
+            PDFTextStripper pageStripper = new PDFTextStripper();
+            int pagesSignatureDetectees = 0;
+            int pagesSignatureSignees = 0;
             for (int pageIndex = 0; pageIndex < pageCount; pageIndex++) {
+                pageStripper.setStartPage(pageIndex + 1);
+                pageStripper.setEndPage(pageIndex + 1);
+                String pageText = normaliserTexte(pageStripper.getText(document));
+                if (!pageText.contains("cachet et signature de l'adherent")) {
+                    continue;
+                }
+                pagesSignatureDetectees++;
                 BufferedImage image = renderer.renderImageWithDPI(pageIndex, RENDER_DPI);
                 if (analyserZone(image)) {
-                    pagesSignees++;
+                    pagesSignatureSignees++;
                 }
             }
 
             int sectionsAttendues = Math.max(expectedSignedSections, 1);
             LOGGER.info(
-                "Contrat : {} page(s) signee(s) sur {} attendue(s) ({} page(s) au total).",
-                pagesSignees,
+                "Contrat : {} page(s) de signature détectée(s), {} signée(s), {} section(s) attendue(s), {} page(s) au total.",
+                pagesSignatureDetectees,
+                pagesSignatureSignees,
                 sectionsAttendues,
                 pageCount
             );
-            return pagesSignees >= sectionsAttendues;
+            // Le nombre doit être exact : une page quelconque noircie ou une section
+            // dupliquée ne peut pas compenser un sous-contrat absent/non signé.
+            return pagesSignatureDetectees == sectionsAttendues
+                && pagesSignatureSignees == sectionsAttendues;
         }
+    }
+
+    private String normaliserTexte(String value) {
+        String sansAccents = Normalizer.normalize(value == null ? "" : value, Normalizer.Form.NFD)
+            .replaceAll("\\p{M}+", "");
+        return sansAccents.toLowerCase().replace('’', '\'');
     }
 
     private boolean analyserImage(byte[] bytes) throws IOException {

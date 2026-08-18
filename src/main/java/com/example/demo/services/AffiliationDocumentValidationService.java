@@ -40,13 +40,21 @@ public class AffiliationDocumentValidationService {
     private final URI validationFallbackEndpoint;
     private final URI processingEndpoint;
     private final URI processingFallbackEndpoint;
+    // Vide par défaut : doc-classifier désactive son authentification tant
+    // que API_KEY n'est pas défini côté serveur (mode dev). En production,
+    // définir app.affiliation.document-validator.api-key ICI ET API_KEY côté
+    // doc-classifier avec la même valeur — sinon tous les appels /api/validate
+    // et /api/process reçoivent 401 dès que la clé serveur est activée.
+    private final String apiKey;
 
     public AffiliationDocumentValidationService(
         @Value("${app.affiliation.document-validator.enabled:true}") boolean validationEnabled,
         @Value("${app.affiliation.document-validator.base-url:http://127.0.0.1:9001}")
-        String documentValidatorBaseUrl
+        String documentValidatorBaseUrl,
+        @Value("${app.affiliation.document-validator.api-key:}") String apiKey
     ) {
         this.validationEnabled = validationEnabled;
+        this.apiKey = apiKey;
         this.httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(5))
             .build();
@@ -278,12 +286,16 @@ public class AffiliationDocumentValidationService {
             file
         );
 
-        HttpRequest request = HttpRequest.newBuilder(endpoint)
+        HttpRequest.Builder builder = HttpRequest.newBuilder(endpoint)
             .timeout(Duration.ofSeconds(90))
             .header(
                 "Content-Type",
                 MediaType.MULTIPART_FORM_DATA_VALUE + "; boundary=" + boundary
-            )
+            );
+        if (StringUtils.hasText(apiKey)) {
+            builder.header("X-API-Key", apiKey);
+        }
+        HttpRequest request = builder
             .POST(HttpRequest.BodyPublishers.ofByteArray(requestBody))
             .build();
 
@@ -318,12 +330,16 @@ public class AffiliationDocumentValidationService {
         String boundary = "----LanaCashDocumentValidation" + UUID.randomUUID();
         byte[] requestBody = buildMultipartRequestBody(boundary, Map.of(), file);
 
-        HttpRequest request = HttpRequest.newBuilder(endpoint)
+        HttpRequest.Builder builder = HttpRequest.newBuilder(endpoint)
             .timeout(Duration.ofSeconds(90))
             .header(
                 "Content-Type",
                 MediaType.MULTIPART_FORM_DATA_VALUE + "; boundary=" + boundary
-            )
+            );
+        if (StringUtils.hasText(apiKey)) {
+            builder.header("X-API-Key", apiKey);
+        }
+        HttpRequest request = builder
             .POST(HttpRequest.BodyPublishers.ofByteArray(requestBody))
             .build();
 

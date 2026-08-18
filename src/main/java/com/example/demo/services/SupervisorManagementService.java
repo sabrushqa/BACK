@@ -4,6 +4,8 @@ import com.example.demo.dto.AssignAffiliationRequest;
 import com.example.demo.dto.CreateBackOfficeRequest;
 import com.example.demo.dto.CreateCommercialeRequest;
 import com.example.demo.dto.SupervisorActionResponse;
+import com.example.demo.dto.SupervisorCommercantTransactionsResponse;
+import com.example.demo.dto.SupervisorEcommerceSiteAssignRequest;
 import com.example.demo.dto.SupervisorOverviewResponse;
 import com.example.demo.dto.SupervisorPasswordChangeRequest;
 import com.example.demo.dto.SupervisorPdvMapResponse;
@@ -466,6 +468,49 @@ public class SupervisorManagementService {
         return new SupervisorActionResponse("Le compte commerçant a été desactive.");
     }
 
+    /**
+     * Resilie un commercant deja affilie et actif (statut ACCEPTE) — distinct
+     * d'une simple desactivation de compte (deactivateCommercant, qui peut
+     * couvrir n'importe quelle raison : fraude, suspension temporaire...).
+     * Ce statut RESILIE devient le vrai label metier "abandonne=1" pour un
+     * futur export/reentrainement de lana-merchant-intelligence sur donnees
+     * reelles — sans cette action, aucun vrai exemple positif n'existe.
+     */
+    public SupervisorActionResponse resilierCommercant(
+        String authorizationHeader,
+        Long commercantId,
+        String motif
+    ) {
+        readAuthenticatedSupervisor(authorizationHeader);
+
+        commercant commercant = commercantRepository
+            .findById(commercantId)
+            .orElseThrow(() -> new IllegalArgumentException("Compte commerçant introuvable."));
+
+        dossier_affiliation dossier = dossierAffiliationRepository
+            .findAllByCommercant_IdCommercantOrderByDateSoumissionDescIdDossierDesc(commercantId)
+            .stream()
+            .findFirst()
+            .orElseThrow(() -> new IllegalArgumentException("Aucun dossier d'affiliation pour ce commerçant."));
+
+        if (dossier.getStatus() != StatusDossier.ACCEPTE) {
+            throw new IllegalArgumentException(
+                "Seul un commerçant actif (dossier accepté) peut être résilié."
+            );
+        }
+
+        dossier.setStatus(StatusDossier.RESILIE);
+        dossier.setMotifRefus(
+            StringUtils.hasText(motif) ? motif : "Résiliation du contrat par le superviseur."
+        );
+        dossier.setDateTraitementBackOffice(LocalDate.now());
+        dossierAffiliationRepository.save(dossier);
+
+        deactivateManagedUser(commercant.getUtilisateur());
+
+        return new SupervisorActionResponse("Le commerçant a été résilié.");
+    }
+
     public SupervisorActionResponse sendCommercantActivation(String authorizationHeader, Long commercantId) {
         readAuthenticatedSupervisor(authorizationHeader);
 
@@ -523,6 +568,94 @@ public class SupervisorManagementService {
                 .map(this::mapSwitchTpeStockItem)
                 .toList()
         );
+    }
+
+    /**
+     * Historique des transactions d'un commerçant, pour la page superviseur
+     * "Transactions" (liste déroulante de commerçants). Même source de
+     * vérité et même résolution de PDV que le dashboard commerçant
+     * (MerchantAccessService::buildTransactionItemsForCommercant), mais sans
+     * historique local — un superviseur n'a pas besoin des transactions
+     * auto-provisionnées NOUVEAU_PDV, uniquement du flux réel côté switch.
+     */
+    public SupervisorCommercantTransactionsResponse getCommercantTransactions(
+        String authorizationHeader,
+        Long commercantId
+    ) {
+        readAuthenticatedSupervisor(authorizationHeader);
+
+        commercant commercant = commercantRepository.findById(commercantId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Commerçant introuvable."));
+        String commercantNom = firstNotBlankOrEmpty(commercant.getNomCommercial(), commercant.getRaisonSociale());
+
+        List<pdv> pdvs = pdvRepository.findByCommercant_IdCommercantOrderByIdPDVAsc(commercantId);
+        List<SwitchMonetiqueClient.SwitchTransaction> oracleTransactions = fetchOracleTransactionsSafely(commercantId);
+        List<SwitchMonetiqueClient.SwitchTpe> oracleStock = fetchOracleStockSafelyForTransactions();
+
+        Map<String, pdv> pdvById = pdvs.stream()
+            .collect(Collectors.toMap(p -> p.getIdPDV().toString(), p -> p, (a, b) -> a));
+        Map<String, String> pdvIdByTpeId = oracleStock.stream()
+            .filter(tpe -> tpe.idPdv() != null)
+            .collect(Collectors.toMap(
+                SwitchMonetiqueClient.SwitchTpe::idTpe,
+                SwitchMonetiqueClient.SwitchTpe::idPdv,
+                (a, b) -> a
+            ));
+
+        List<com.example.demo.dto.MerchantSessionResponse.TransactionItem> items = oracleTransactions.stream()
+            .map(transaction -> {
+                String idPdv = transaction.idTpe() == null ? null : pdvIdByTpeId.get(transaction.idTpe());
+                pdv matchedPdv = idPdv == null ? null : pdvById.get(idPdv);
+                LocalDateTime date = transaction.dateTransaction();
+                return new com.example.demo.dto.MerchantSessionResponse.TransactionItem(
+                    transaction.idTransaction(),
+                    safeOrEmpty(transaction.canal()),
+                    date == null ? "" : date.toLocalDate().toString(),
+                    date == null ? "" : date.toLocalTime().toString(),
+                    transaction.montant(),
+                    safeOrEmpty(transaction.devise()),
+                    safeOrEmpty(transaction.statut()),
+                    safeOrEmpty(transaction.mode()),
+                    firstNotBlankOrEmpty(transaction.idTpe(), transaction.idSiteEcommerce()),
+                    matchedPdv == null ? null : matchedPdv.getIdPDV(),
+                    matchedPdv == null ? "" : safeOrEmpty(matchedPdv.getNomPDV())
+                );
+            })
+            .sorted(Comparator.comparing((com.example.demo.dto.MerchantSessionResponse.TransactionItem item) ->
+                item.dateTransaction() + "T" + item.heureTransaction()
+            ).reversed())
+            .toList();
+
+        return new SupervisorCommercantTransactionsResponse(commercantId, commercantNom, items);
+    }
+
+    private List<SwitchMonetiqueClient.SwitchTransaction> fetchOracleTransactionsSafely(Long commercantId) {
+        try {
+            return switchMonetiqueClient.transactions(commercantId.toString());
+        } catch (RuntimeException exception) {
+            return List.of();
+        }
+    }
+
+    private List<SwitchMonetiqueClient.SwitchTpe> fetchOracleStockSafelyForTransactions() {
+        try {
+            return switchMonetiqueClient.stockComplet();
+        } catch (RuntimeException exception) {
+            return List.of();
+        }
+    }
+
+    private String firstNotBlankOrEmpty(String... values) {
+        for (String value : values) {
+            if (StringUtils.hasText(value)) {
+                return value;
+            }
+        }
+        return "";
+    }
+
+    private String safeOrEmpty(String value) {
+        return value == null ? "" : value;
     }
 
     public SupervisorActionResponse activateTpe(String authorizationHeader, String tpeId) {
@@ -600,6 +733,84 @@ public class SupervisorManagementService {
         supervisorNotificationService.notifyTpeAssigned(dossier, commercant);
 
         return new SupervisorActionResponse("La référence TPE a été affectée au commerçant du dossier validé.");
+    }
+
+    /**
+     * Equivalent de assignTpeToCommercant() pour le canal e-commerce : un
+     * dossier E_COMMERCE ne peut jamais recevoir de TPE (voir
+     * validateTpeAssignment), il n'y avait donc jusqu'ici aucun evenement
+     * capable de faire passer un prospect e-commerce en CONVERTI. Ici,
+     * l'"affectation" equivalente est l'interfacage reel du site marchand
+     * avec switch-monetique-service (creation de la fiche site_ecommerce
+     * cote switch, liee au commercant).
+     *
+     * Contrairement au TPE, il n'y a pas de stock a choisir : l'identifiant
+     * n'est jamais fourni par l'appelant, il est genere par switch-monetique-
+     * service (source de verite du canal e-commerce) au moment du
+     * provisionnement — le BOA ne fait que confirmer l'URL du site.
+     */
+    public SupervisorActionResponse assignEcommerceSiteToCommercant(
+        String authorizationHeader,
+        SupervisorEcommerceSiteAssignRequest request
+    ) {
+        utilisateur authenticatedUser = readAuthenticatedBackOffice(authorizationHeader);
+        requireTpeAssignmentPermission(authenticatedUser);
+
+        if (request == null || request.dossierId() == null) {
+            throw new IllegalArgumentException("Le dossier commerçant validé est obligatoire.");
+        }
+
+        dossier_affiliation dossier = dossierAffiliationRepository.findById(request.dossierId())
+            .orElseThrow(() -> new IllegalArgumentException("Dossier introuvable."));
+
+        // ENCAISSEMENT_ET_ECOMMERCE combine les deux canaux : ce dossier doit
+        // pouvoir affecter un site e-commerce ICI ET une reference TPE via
+        // assignTpeToCommercant (autorise pour tout type sauf E_COMMERCE pur,
+        // voir validateTpeAssignment) — les deux affectations sont necessaires
+        // en parallele, pas l'une a la place de l'autre.
+        if (dossier.getTypeAffiliation() != TypeAffiliation.E_COMMERCE
+            && dossier.getTypeAffiliation() != TypeAffiliation.ENCAISSEMENT_ET_ECOMMERCE) {
+            throw new IllegalArgumentException("Ce dossier n'a pas de canal e-commerce à affecter.");
+        }
+        // Meme regle que validateTpeAssignment : contrat reellement signe/depose
+        // avant toute affectation.
+        if (dossier.getStatus() != StatusDossier.ACCEPTE) {
+            throw new IllegalArgumentException(
+                "Le contrat doit être signé et déposé par le commerçant avant de pouvoir affecter un site e-commerce."
+            );
+        }
+        if (StringUtils.hasText(dossier.getIdSiteEcommerceAffecte())) {
+            throw new IllegalArgumentException("Un site e-commerce est déjà affecté à ce dossier.");
+        }
+
+        commercant commercant = dossier.getCommercant();
+        if (commercant == null || commercant.getIdCommercant() == null) {
+            throw new IllegalArgumentException("Le commerçant du dossier est introuvable.");
+        }
+
+        String url = StringUtils.hasText(request.url()) ? request.url().trim() : dossier.getSiteMarchandUrl();
+        if (!StringUtils.hasText(url)) {
+            throw new IllegalArgumentException("L'URL du site e-commerce est obligatoire.");
+        }
+
+        SwitchMonetiqueClient.SwitchSiteEcommerce site =
+            switchMonetiqueClient.provisionnerSiteEcommerce(commercant.getIdCommercant().toString(), url);
+
+        dossier.setIdSiteEcommerceAffecte(site.idSiteEcommerce());
+
+        // Meme logique que pour le TPE : le prospect n'est marque CONVERTI
+        // qu'une fois le canal reellement interface avec Switch, pas des la
+        // simple validation du dossier (ACCEPTE).
+        if (isCommercialDirectDossier(dossier) && dossier.getProspectStatus() != ProspectStatus.CONVERTI) {
+            dossier.setProspectStatus(ProspectStatus.CONVERTI);
+        }
+        dossierAffiliationRepository.save(dossier);
+
+        supervisorNotificationService.notifyEcommerceSiteAssigned(dossier, commercant);
+
+        return new SupervisorActionResponse(
+            "Le site e-commerce " + site.idSiteEcommerce() + " a été affecté au commerçant du dossier validé."
+        );
     }
 
     private boolean isCommercialDirectDossier(dossier_affiliation dossier) {
@@ -890,7 +1101,11 @@ public class SupervisorManagementService {
     }
 
     private String normalizeEmail(String value) {
-        return normalize(value).toLowerCase(Locale.ROOT);
+        // Sonar S2259 : normalize() peut renvoyer null (valeur d'entree null) ;
+        // enchainer .toLowerCase() dessus sans garde levait alors une NPE au lieu
+        // de propager proprement l'absence de valeur.
+        String normalized = normalize(value);
+        return normalized == null ? null : normalized.toLowerCase(Locale.ROOT);
     }
 
     private String requireTpeId(String tpeId) {

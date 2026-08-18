@@ -20,7 +20,7 @@ class ServiceDocumentContratAffiliationTest {
     @Test
     void generatedCommercialReportFitsSingleA4PageAndCanBeDownloaded() throws IOException {
         GenerateurModeleContratAffiliation templateRenderer =
-            new GenerateurModeleContratAffiliation(null, null, null, null);
+            new GenerateurModeleContratAffiliation(null, null, null, null, new PdfLogoProvider());
         ServiceDocumentContratAffiliation documentService =
             new ServiceDocumentContratAffiliation(
                 templateRenderer,

@@ -59,6 +59,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
@@ -66,6 +68,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import com.example.demo.config.DocumentMimeValidator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -202,7 +206,7 @@ public class StaffAffiliationManagementService {
             return new StaffAffiliationOverviewResponse(List.of());
         }
 
-        List<StaffAffiliationOverviewResponse.AffiliationRequestItem> requests = dossierAffiliationRepository
+        List<dossier_affiliation> sortedDossiers = dossierAffiliationRepository
             .findAllByOrderByDateSoumissionDescIdDossierDesc()
             .stream()
             .filter(
@@ -246,10 +250,166 @@ public class StaffAffiliationManagementService {
                         Comparator.nullsLast(Comparator.reverseOrder())
                     )
             )
-            .map(this::mapRequestItem)
             .toList();
 
-        return new StaffAffiliationOverviewResponse(requests);
+        // Un seul appel reseau vers switch-monetique-service pour TOUTE la
+        // liste plutot qu'un appel par dossier (isTpeAlreadyFullyAssigned en
+        // avait besoin par ligne) : avec des centaines de dossiers, c'etait
+        // autant de round-trips HTTP synchrones vers un service externe pour
+        // calculer un simple booleen — la cause principale de lenteur de cet
+        // endpoint (le reste ne fait que des requetes DB locales, bien plus
+        // rapides). Un seul stockComplet() ici (regroupe par commerçant ET
+        // par PDV a partir du meme resultat — un deuxieme appel reseau ici
+        // reintroduirait la meme lenteur), puis reutilise pour chaque ligne.
+        List<SwitchMonetiqueClient.SwitchTpe> oracleTpeStock = fetchOracleTpeStockSafely();
+        Map<Long, Long> oracleTpeCountsByCommercantId = groupOracleTpeCount(
+            oracleTpeStock, SwitchMonetiqueClient.SwitchTpe::idCommercant
+        );
+        Map<Long, Long> oracleTpeCountsByPdvId = groupOracleTpeCount(
+            oracleTpeStock, SwitchMonetiqueClient.SwitchTpe::idPdv
+        );
+
+        // Meme logique que ci-dessus pour switch-monetique-service, appliquee cette
+        // fois a findAcceptedPrincipalDossier()/countExtensionRequests() : ces deux
+        // methodes faisaient chacune un SELECT dossierAffiliationRepository par ligne
+        // (mapRequestItem est appele une fois par dossier), soit jusqu'a 2 requetes DB
+        // supplementaires par ligne — la cause principale de lenteur de la page
+        // "Demandes extension", ou CHAQUE ligne est une extension et declenche donc
+        // systematiquement les deux. sortedDossiers contient deja TOUS les dossiers en
+        // memoire (charges par le findAll ci-dessus) : on peut calculer les deux a
+        // partir de cette liste, sans aucun aller-retour DB supplementaire.
+        Map<Long, List<dossier_affiliation>> dossiersByCommercantId = sortedDossiers.stream()
+            .filter(dossier -> dossier.getCommercant() != null && dossier.getCommercant().getIdCommercant() != null)
+            .collect(Collectors.groupingBy(dossier -> dossier.getCommercant().getIdCommercant()));
+
+        Map<Long, Integer> extensionCountsByCommercantId = dossiersByCommercantId.entrySet().stream()
+            .collect(Collectors.toMap(
+                Map.Entry::getKey,
+                entry -> (int) entry.getValue().stream().filter(this::isNewPdvProductRequest).count()
+            ));
+
+        Map<Long, dossier_affiliation> acceptedPrincipalDossierByCommercantId = dossiersByCommercantId.entrySet().stream()
+            .map(entry -> Map.entry(
+                entry.getKey(),
+                entry.getValue().stream()
+                    .filter(dossier -> !isNewPdvProductRequest(dossier))
+                    .filter(dossier -> dossier.getStatus() == StatusDossier.ACCEPTE)
+                    // Reproduit ORDER BY dateSoumission DESC, idDossier DESC LIMIT 1
+                    // (findAcceptedPrincipalDossier d'origine) : le "max" au sens de ce
+                    // comparateur est bien le premier resultat de ce tri.
+                    .max(
+                        Comparator
+                            .comparing(
+                                dossier_affiliation::getDateSoumission,
+                                Comparator.nullsFirst(Comparator.naturalOrder())
+                            )
+                            .thenComparing(
+                                dossier_affiliation::getIdDossier,
+                                Comparator.nullsFirst(Comparator.naturalOrder())
+                            )
+                    )
+            ))
+            .filter(entry -> entry.getValue().isPresent())
+            .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().get()));
+
+        // Meme principe : documentsRepository et resolveMerchantProfile()
+        // etaient appeles une fois PAR DOSSIER a l'interieur de mapRequestItem
+        // (documents lies au dossier, puis PP/PM/AE/Association selon le type
+        // de commercant) — encore deux allers-retours DB par ligne, la
+        // derniere cause de lenteur restante sur cette liste. On charge tout
+        // en 5 requetes groupees (IN (...)) avant la boucle de mapping.
+        List<Long> dossierIds = sortedDossiers.stream()
+            .map(dossier_affiliation::getIdDossier)
+            .filter(Objects::nonNull)
+            .toList();
+        Map<Long, List<documents>> documentsByDossierId = documentsRepository
+            .findAllByDossierAffiliation_IdDossierInOrderByDateUploadDescIdDocumentDesc(dossierIds)
+            .stream()
+            .filter(document -> document.getDossierAffiliation() != null)
+            .collect(Collectors.groupingBy(document -> document.getDossierAffiliation().getIdDossier()));
+
+        List<Long> commercantIds = sortedDossiers.stream()
+            .map(dossier_affiliation::getCommercant)
+            .filter(Objects::nonNull)
+            .map(commercant::getIdCommercant)
+            .filter(Objects::nonNull)
+            .distinct()
+            .toList();
+        Map<Long, PP> ppByCommercantId = ppRepository
+            .findAllByCommercant_IdCommercantIn(commercantIds)
+            .stream()
+            .collect(Collectors.toMap(pp -> pp.getCommercant().getIdCommercant(), pp -> pp, (a, b) -> a));
+        Map<Long, PM> pmByCommercantId = pmRepository
+            .findAllByCommercant_IdCommercantIn(commercantIds)
+            .stream()
+            .collect(Collectors.toMap(pm -> pm.getCommercant().getIdCommercant(), pm -> pm, (a, b) -> a));
+        Map<Long, AE> aeByCommercantId = aeRepository
+            .findAllByCommercant_IdCommercantIn(commercantIds)
+            .stream()
+            .collect(Collectors.toMap(ae -> ae.getCommercant().getIdCommercant(), ae -> ae, (a, b) -> a));
+        Map<Long, Association> associationByCommercantId = associationRepository
+            .findAllByCommercant_IdCommercantIn(commercantIds)
+            .stream()
+            .collect(Collectors.toMap(
+                association -> association.getCommercant().getIdCommercant(), association -> association, (a, b) -> a
+            ));
+
+        return new StaffAffiliationOverviewResponse(
+            sortedDossiers.stream()
+                .map(dossier -> mapRequestItem(
+                    dossier,
+                    oracleTpeCountsByCommercantId,
+                    oracleTpeCountsByPdvId,
+                    extensionCountsByCommercantId,
+                    acceptedPrincipalDossierByCommercantId,
+                    documentsByDossierId,
+                    ppByCommercantId,
+                    pmByCommercantId,
+                    aeByCommercantId,
+                    associationByCommercantId
+                ))
+                .toList()
+        );
+    }
+
+    /**
+     * Un seul appel reseau vers switch-monetique-service pour toute la liste,
+     * quel que soit ensuite le nombre de regroupements calcules a partir du
+     * resultat (par commercant, par PDV...) — un deuxieme appel ici pour un
+     * deuxieme regroupement reintroduirait la lenteur que ce cache resout.
+     */
+    private List<SwitchMonetiqueClient.SwitchTpe> fetchOracleTpeStockSafely() {
+        try {
+            return switchMonetiqueClient.stockComplet();
+        } catch (RuntimeException exception) {
+            LOGGER.warn(
+                "[StaffAffiliationManagementService] switch-monetique-service injoignable, "
+                    + "impossible de verifier l'affectation TPE Oracle pour la liste des dossiers.",
+                exception
+            );
+            return List.of();
+        }
+    }
+
+    /**
+     * Regroupe le stock Oracle deja recupere selon la clef fournie (id
+     * commercant ou id PDV) — necessaire pour isTpeAlreadyFullyAssigned sur
+     * une demande d'extension (NOUVEAU_PDV) : un commercant deja affilie
+     * (donc deja titulaire d'au moins un TPE) ne doit pas voir sa NOUVELLE
+     * extension marquee "TPE deja affecte" simplement parce que son ANCIEN
+     * point de vente en a deja un — seul le PDV vise par CETTE extension doit
+     * compter, d'ou le regroupement par PDV en plus de celui par commercant.
+     */
+    private Map<Long, Long> groupOracleTpeCount(
+        List<SwitchMonetiqueClient.SwitchTpe> oracleTpeStock,
+        java.util.function.Function<SwitchMonetiqueClient.SwitchTpe, String> keyExtractor
+    ) {
+        return oracleTpeStock.stream()
+            .filter(tpe -> keyExtractor.apply(tpe) != null)
+            .collect(Collectors.groupingBy(
+                tpe -> Long.valueOf(keyExtractor.apply(tpe)),
+                Collectors.counting()
+            ));
     }
 
     public AffiliationActionResponse completeMerchantDossier(
@@ -798,6 +958,10 @@ public class StaffAffiliationManagementService {
 
         byte[] contratPdf = readOptionalGeneratedFile(dossier.getGeneratedContractPath());
         byte[] compteRenduPdf = readOptionalGeneratedFile(dossier.getCommercialReportPath());
+        // Le contrat SIGNE (depose par le commerçant) est distinct du contrat
+        // genere (vierge) deja inclus ci-dessus — sans lui, le "dossier
+        // complet" ne prouve jamais que le commerçant a reellement signe.
+        byte[] contratSignePdf = readOptionalGeneratedFile(dossier.getSignedContractPath());
 
         List<ServiceDocumentContratAffiliation.DocumentAFusionner> documentsAFusionner = documentsDeposes
             .stream()
@@ -805,12 +969,19 @@ public class StaffAffiliationManagementService {
             .filter(Objects::nonNull)
             .toList();
 
+        List<byte[]> extraSections = new ArrayList<>();
+        if (contratSignePdf != null && contratSignePdf.length > 0) {
+            extraSections.add(contratSignePdf);
+        }
+        extraSections.addAll(collectActiveExtensionSections(dossier));
+
         byte[] mergedPdf = serviceDocumentContratAffiliation.genererDossierComplet(
             dossier,
             documentsDeposes,
             contratPdf,
             compteRenduPdf,
-            documentsAFusionner
+            documentsAFusionner,
+            extraSections
         );
 
         return new DocumentDownload(
@@ -825,6 +996,32 @@ public class StaffAffiliationManagementService {
             return null;
         }
         return serviceDocumentContratAffiliation.telechargerFichier(storedPath).contenu();
+    }
+
+    /**
+     * Contrat (+ compte-rendu s'il existe) de chaque demande d'extension
+     * (NOUVEAU_PDV) deja ACCEPTEE de ce commerçant — pour que le "dossier
+     * complet" telecharge reflete aussi les PDV/TPE/canaux ajoutes apres
+     * l'affiliation initiale, pas seulement le dossier d'origine.
+     */
+    private List<byte[]> collectActiveExtensionSections(dossier_affiliation principalDossier) {
+        commercant commercant = principalDossier.getCommercant();
+        if (commercant == null || commercant.getIdCommercant() == null) {
+            return List.of();
+        }
+
+        return dossierAffiliationRepository
+            .findAllByCommercant_IdCommercantOrderByDateSoumissionDescIdDossierDesc(commercant.getIdCommercant())
+            .stream()
+            .filter(this::isNewPdvProductRequest)
+            .filter(extension -> extension.getStatus() == StatusDossier.ACCEPTE)
+            .flatMap(extension -> Stream.of(
+                readOptionalGeneratedFile(extension.getGeneratedContractPath()),
+                readOptionalGeneratedFile(extension.getSignedContractPath()),
+                readOptionalGeneratedFile(extension.getCommercialReportPath())
+            ))
+            .filter(Objects::nonNull)
+            .toList();
     }
 
     private ServiceDocumentContratAffiliation.DocumentAFusionner toDocumentAFusionner(documents document) {
@@ -851,14 +1048,26 @@ public class StaffAffiliationManagementService {
     }
 
     private StaffAffiliationOverviewResponse.AffiliationRequestItem mapRequestItem(
-        dossier_affiliation dossier
+        dossier_affiliation dossier,
+        Map<Long, Long> oracleTpeCountsByCommercantId,
+        Map<Long, Long> oracleTpeCountsByPdvId,
+        Map<Long, Integer> extensionCountsByCommercantId,
+        Map<Long, dossier_affiliation> acceptedPrincipalDossierByCommercantId,
+        Map<Long, List<documents>> documentsByDossierId,
+        Map<Long, PP> ppByCommercantId,
+        Map<Long, PM> pmByCommercantId,
+        Map<Long, AE> aeByCommercantId,
+        Map<Long, Association> associationByCommercantId
     ) {
         commercant commercant = dossier.getCommercant();
         utilisateur utilisateur = commercant == null ? null : commercant.getUtilisateur();
-        MerchantProfileSnapshot merchantProfile = resolveMerchantProfile(commercant);
+        MerchantProfileSnapshot merchantProfile = resolveMerchantProfile(
+            commercant, ppByCommercantId, pmByCommercantId, aeByCommercantId, associationByCommercantId
+        );
         boolean newPdvRequest = isNewPdvProductRequest(dossier);
-        dossier_affiliation principalDossier = newPdvRequest
-            ? findAcceptedPrincipalDossier(commercant).orElse(null)
+        Long commercantId = commercant == null ? null : commercant.getIdCommercant();
+        dossier_affiliation principalDossier = newPdvRequest && commercantId != null
+            ? acceptedPrincipalDossierByCommercantId.get(commercantId)
             : null;
         commerciale commerciale = firstNonNull(
             dossier.getCommercialeAssignee(),
@@ -872,12 +1081,12 @@ public class StaffAffiliationManagementService {
             principalDossier == null ? null : principalDossier.getBackOffice()
         );
         pdv requestedPdv = dossier.getRequestedPdv();
-        Integer nombreDemandesExtention = countExtensionRequests(commercant);
+        Integer nombreDemandesExtention = commercantId == null
+            ? 0
+            : extensionCountsByCommercantId.getOrDefault(commercantId, 0);
         List<StaffAffiliationOverviewResponse.AffiliationDocumentItem> documents =
-            documentsRepository
-                .findAllByDossierAffiliation_IdDossierOrderByDateUploadDescIdDocumentDesc(
-                    dossier.getIdDossier()
-                )
+            documentsByDossierId
+                .getOrDefault(dossier.getIdDossier(), List.of())
                 .stream()
                 .map(
                     document ->
@@ -1043,49 +1252,70 @@ public class StaffAffiliationManagementService {
             requestedPdv == null ? "" : safe(requestedPdv.getTelephone()),
             requestedPdv == null ? "" : safe(requestedPdv.getEmail()),
             requestedPdv == null ? "" : safe(requestedPdv.getStatut()),
-            isTpeAlreadyFullyAssigned(dossier, commercant),
+            Boolean.TRUE.equals(dossier.getRequestedPdvDejaExistant()),
+            isTpeAlreadyFullyAssigned(dossier, commercant, oracleTpeCountsByCommercantId, oracleTpeCountsByPdvId),
+            StringUtils.hasText(dossier.getIdSiteEcommerceAffecte()),
             dossier.getNombreCorrections() == null ? 0 : dossier.getNombreCorrections(),
             safe(dossier.getDernierMotifCorrection())
         );
     }
 
-    private boolean isTpeAlreadyFullyAssigned(dossier_affiliation dossier, commercant commercant) {
+    private boolean isTpeAlreadyFullyAssigned(
+        dossier_affiliation dossier,
+        commercant commercant,
+        Map<Long, Long> oracleTpeCountsByCommercantId,
+        Map<Long, Long> oracleTpeCountsByPdvId
+    ) {
         if (commercant == null || commercant.getIdCommercant() == null
             || dossier.getTypeAffiliation() == TypeAffiliation.E_COMMERCE) {
             return false;
         }
         Integer requestedCount = dossier.getNombreTpe();
         int required = requestedCount != null && requestedCount > 0 ? requestedCount : 1;
+
+        // Une demande d'extension (NOUVEAU_PDV) vise un point de vente precis
+        // (requestedPdv) : seul ce PDV doit compter, pas le total du
+        // commercant. Sans cette distinction, un commercant deja affilie
+        // (donc deja titulaire d'au moins un TPE sur son PREMIER point de
+        // vente) voyait sa NOUVELLE extension marquee "TPE deja affecte" a
+        // tort des sa creation — elle disparaissait alors de la page "TPE a
+        // affecter" avant meme d'avoir recu sa propre reference. Bug reel
+        // constate manuellement (compte "soraya").
+        pdv requestedPdv = dossier.getRequestedPdv();
+        if (requestedPdv != null && requestedPdv.getIdPDV() != null) {
+            long assignedForThisPdv = tpeRepository.countByPdv_IdPDVAndStatut(
+                requestedPdv.getIdPDV(),
+                "AFFECTE_COMMERCANT"
+            ) + oracleTpeCountsByPdvId.getOrDefault(requestedPdv.getIdPDV(), 0L);
+            return assignedForThisPdv >= required;
+        }
+
         // La table locale "tpe" ne couvre que le provisionnement auto pour les
         // demandes NOUVEAU_PDV. Le flux BOA principal (assignTpeToCommercant)
         // affecte le TPE uniquement côté Oracle — sans ce comptage, ce champ
         // restait faussement à false pour ce flux (voir MerchantAccessService::
-        // hasTpeAssignedInOracle, même correctif).
+        // hasTpeAssignedInOracle, même correctif). Le compte Oracle est
+        // precalcule une seule fois pour toute la liste (countTpeAssignedInOracleByCommercant)
+        // plutot qu'interroge ici service par service par dossier.
         long assignedCount = tpeRepository.countByPdv_Commercant_IdCommercantAndStatut(
             commercant.getIdCommercant(),
             "AFFECTE_COMMERCANT"
-        ) + countTpeAssignedInOracle(commercant.getIdCommercant());
+        ) + oracleTpeCountsByCommercantId.getOrDefault(commercant.getIdCommercant(), 0L);
         return assignedCount >= required;
     }
 
-    private long countTpeAssignedInOracle(Long commercantId) {
-        try {
-            String idCommercant = commercantId.toString();
-            return switchMonetiqueClient.stockComplet().stream()
-                .filter(tpe -> idCommercant.equals(tpe.idCommercant()))
-                .count();
-        } catch (RuntimeException exception) {
-            LOGGER.warn(
-                "[StaffAffiliationManagementService] switch-monetique-service injoignable, "
-                    + "impossible de vérifier l'affectation TPE Oracle pour le commerçant {}.",
-                commercantId,
-                exception
-            );
-            return 0L;
-        }
-    }
-
-    private MerchantProfileSnapshot resolveMerchantProfile(commercant commercant) {
+    /**
+     * Version batchee (utilisee par getRequests()/mapRequestItem()) : lit dans des
+     * Map deja chargees en une seule requete IN (...) pour toute la liste, plutot
+     * que d'interroger PP/PM/AE/AssociationRepository une fois par dossier.
+     */
+    private MerchantProfileSnapshot resolveMerchantProfile(
+        commercant commercant,
+        Map<Long, PP> ppByCommercantId,
+        Map<Long, PM> pmByCommercantId,
+        Map<Long, AE> aeByCommercantId,
+        Map<Long, Association> associationByCommercantId
+    ) {
         if (commercant == null || commercant.getIdCommercant() == null || commercant.getType() == null) {
             return MerchantProfileSnapshot.empty();
         }
@@ -1093,86 +1323,58 @@ public class StaffAffiliationManagementService {
         Long commercantId = commercant.getIdCommercant();
 
         return switch (commercant.getType()) {
-            case PERSONNE_PHYSIQUE ->
-                ppRepository
-                    .findByCommercant_IdCommercant(commercantId)
-                    .map(
-                        pp ->
-                            new MerchantProfileSnapshot(
-                                pp.getNom(),
-                                pp.getPrenom(),
-                                pp.getCin(),
-                                "",
-                                "",
-                                "",
-                                "",
-                                "",
-                                "",
-                                "",
-                                ""
-                            )
-                    )
-                    .orElseGet(MerchantProfileSnapshot::empty);
-            case PERSONNE_MORALE ->
-                pmRepository
-                    .findByCommercant_IdCommercant(commercantId)
-                    .map(
-                        pm ->
-                            new MerchantProfileSnapshot(
-                                "",
-                                "",
-                                "",
-                                pm.getRaisonSociale(),
-                                pm.getRegistreCommerce(),
-                                pm.getIce(),
-                                pm.getFormeJuridique(),
-                                pm.getRepresentantLegal(),
-                                "",
-                                "",
-                                ""
-                            )
-                    )
-                    .orElseGet(MerchantProfileSnapshot::empty);
-            case AUTO_ENTREPRENEUR ->
-                aeRepository
-                    .findByCommercant_IdCommercant(commercantId)
-                    .map(
-                        ae ->
-                            new MerchantProfileSnapshot(
-                                ae.getNom(),
-                                ae.getPrenom(),
-                                "",
-                                "",
-                                "",
-                                "",
-                                "",
-                                "",
-                                ae.getNumeroAutoEntrepreneur(),
-                                "",
-                                ""
-                            )
-                    )
-                    .orElseGet(MerchantProfileSnapshot::empty);
-            case ASSOCIATION_FONDATION ->
-                associationRepository
-                    .findByCommercant_IdCommercant(commercantId)
-                    .map(
-                        association ->
-                            new MerchantProfileSnapshot(
-                                "",
-                                "",
-                                "",
-                                "",
-                                "",
-                                "",
-                                "",
-                                association.getRepresentantLegal(),
-                                "",
-                                association.getNomEntite(),
-                                association.getObjet()
-                            )
-                    )
-                    .orElseGet(MerchantProfileSnapshot::empty);
+            case PERSONNE_PHYSIQUE -> {
+                PP pp = ppByCommercantId.get(commercantId);
+                yield pp == null
+                    ? MerchantProfileSnapshot.empty()
+                    : new MerchantProfileSnapshot(
+                        pp.getNom(), pp.getPrenom(), pp.getCin(), "", "", "", "", "", "", "", ""
+                    );
+            }
+            case PERSONNE_MORALE -> {
+                PM pm = pmByCommercantId.get(commercantId);
+                yield pm == null
+                    ? MerchantProfileSnapshot.empty()
+                    : new MerchantProfileSnapshot(
+                        "",
+                        "",
+                        "",
+                        pm.getRaisonSociale(),
+                        pm.getRegistreCommerce(),
+                        pm.getIce(),
+                        pm.getFormeJuridique(),
+                        pm.getRepresentantLegal(),
+                        "",
+                        "",
+                        ""
+                    );
+            }
+            case AUTO_ENTREPRENEUR -> {
+                AE ae = aeByCommercantId.get(commercantId);
+                yield ae == null
+                    ? MerchantProfileSnapshot.empty()
+                    : new MerchantProfileSnapshot(
+                        ae.getNom(), ae.getPrenom(), "", "", "", "", "", "", ae.getNumeroAutoEntrepreneur(), "", ""
+                    );
+            }
+            case ASSOCIATION_FONDATION -> {
+                Association association = associationByCommercantId.get(commercantId);
+                yield association == null
+                    ? MerchantProfileSnapshot.empty()
+                    : new MerchantProfileSnapshot(
+                        "",
+                        "",
+                        "",
+                        "",
+                        "",
+                        "",
+                        "",
+                        association.getRepresentantLegal(),
+                        "",
+                        association.getNomEntite(),
+                        association.getObjet()
+                    );
+            }
         };
     }
 
@@ -1346,18 +1548,25 @@ public class StaffAffiliationManagementService {
         // CONVERTI (validé + contrat signé + TPE déjà affecté) est désormais
         // posé dans SupervisorManagementService.assignTpeToCommercant, une
         // fois l'affectation TPE réellement effectuée.
+        //
+        // Une demande NOUVEAU_PDV suit exactement le même circuit d'affectation
+        // manuelle qu'une affiliation initiale (mail + notification BOA, TPE/
+        // SoftPOS/QR affecté depuis "TPE à affecter") — avant ce correctif, ce
+        // flux auto-générait un faux numéro de série (provisionRequestedTerminals)
+        // sans jamais alerter le BOA, ce qui contournait l'affectation réelle.
         if (isNewPdvProductRequest(dossier) && dossier.getRequestedPdv() != null) {
             dossier.getRequestedPdv().setStatut("ACTIF");
-            pdv acceptedPdv = pdvRepository.save(dossier.getRequestedPdv());
-            // Cas NOUVEAU_PDV : les terminaux sont auto-provisionnés ici même
-            // (provisionRequestedTerminals), pas d'affectation manuelle BOA à
-            // attendre — pas de notification "TPE à affecter" pour ce flux.
-            provisionRequestedTerminals(dossier, acceptedPdv);
+            pdvRepository.save(dossier.getRequestedPdv());
         } else {
             pdvRepository.updateStatutByCommercantId(commercant.getIdCommercant(), "ACTIF");
-            if (dossier.getTypeAffiliation() != null && dossier.getTypeAffiliation() != TypeAffiliation.E_COMMERCE) {
-                notifyBackOfficeTpeAssignmentNeeded(dossier);
-            }
+        }
+        // Avant ce correctif, E_COMMERCE etait exclu ici (aucune reference TPE
+        // a affecter) — mais depuis l'ajout de assignEcommerceSiteToCommercant,
+        // ce type a lui aussi besoin d'une affectation manuelle par le BOA (le
+        // site marchand a interfacer avec switch-monetique-service), donc plus
+        // aucun type ne doit etre exclu de cette alerte.
+        if (dossier.getTypeAffiliation() != null) {
+            notifyBackOfficeTpeAssignmentNeeded(dossier);
         }
 
         dossierAffiliationRepository.save(dossier);
@@ -1365,10 +1574,38 @@ public class StaffAffiliationManagementService {
     }
 
     /**
-     * Alerte tous les BOA dès que le contrat est signé/déposé et que le
-     * dossier nécessite une affectation TPE manuelle (tout sauf E_COMMERCE
-     * pur — voir MerchantAccessService::workspaceUnlocked pour la même
-     * distinction côté déblocage de l'espace commerçant).
+     * Formule la fin du message d'alerte BOA selon ce qui reste reellement a
+     * affecter pour ce type d'affiliation : une reference TPE/SoftPOS/QR
+     * (feminin singulier), un site e-commerce (masculin singulier), ou les
+     * deux a la fois pour ENCAISSEMENT_ET_ECOMMERCE (masculin pluriel) — sans
+     * cette distinction, le message parlait toujours de "reference TPE" meme
+     * pour un dossier E_COMMERCE ou aucune reference TPE n'existe.
+     */
+    private String resolvePendingAssignmentClause(TypeAffiliation typeAffiliation) {
+        if (typeAffiliation == TypeAffiliation.E_COMMERCE) {
+            return "un site e-commerce doit être affecté";
+        }
+        if (typeAffiliation == TypeAffiliation.ENCAISSEMENT_ET_ECOMMERCE) {
+            return "une référence TPE/SoftPOS/QR et un site e-commerce doivent être affectés";
+        }
+        return "une référence TPE/SoftPOS/QR doit être affectée";
+    }
+
+    /**
+     * Alerte le BOA dès que le contrat est signé/déposé et que le dossier
+     * nécessite une affectation manuelle : une référence TPE/SoftPOS/QR, un
+     * site e-commerce, ou les deux pour ENCAISSEMENT_ET_ECOMMERCE (voir
+     * resolvePendingAssignmentClause) — aucun type n'est plus exclu depuis
+     * l'ajout de assignEcommerceSiteToCommercant (E_COMMERCE a, lui aussi,
+     * besoin d'une affectation manuelle par le BOA).
+     *
+     * Ne notifie QUE le BOA déjà rattaché à ce dossier quand il est connu
+     * (systématiquement le cas pour une extension — continuité d'affectation
+     * posée à la création, voir MerchantWorkspaceManagementService::
+     * requestNewPdvProduct) — même logique que
+     * notifyBackOfficeDossierReadyForValidation ci-dessus. Sans cette
+     * restriction, TOUS les agents BOA recevaient l'alerte pour un dossier
+     * dont un seul d'entre eux est réellement responsable.
      */
     private void notifyBackOfficeTpeAssignmentNeeded(dossier_affiliation dossier) {
         commercant commercant = dossier.getCommercant();
@@ -1380,9 +1617,15 @@ public class StaffAffiliationManagementService {
             + dossier.getIdDossier()
             + " de "
             + merchantName
-            + " a été signé — une référence TPE doit être affectée pour débloquer son espace.";
+            + " a été signé — "
+            + resolvePendingAssignmentClause(dossier.getTypeAffiliation())
+            + " pour débloquer son espace.";
 
-        for (back_office backOffice : backOfficeRepository.findAllByOrderByNomAscPrenomAscIdBackOfficeAsc()) {
+        List<back_office> recipients = dossier.getBackOffice() != null
+            ? List.of(dossier.getBackOffice())
+            : backOfficeRepository.findAllByOrderByNomAscPrenomAscIdBackOfficeAsc();
+
+        for (back_office backOffice : recipients) {
             utilisateur backOfficeUser = backOffice.getUtilisateur();
             if (backOfficeUser == null) {
                 continue;
@@ -2686,20 +2929,6 @@ public class StaffAffiliationManagementService {
             .findFirst();
     }
 
-    private Integer countExtensionRequests(commercant commercant) {
-        if (commercant == null || commercant.getIdCommercant() == null) {
-            return 0;
-        }
-
-        return (int) dossierAffiliationRepository
-            .findAllByCommercant_IdCommercantOrderByDateSoumissionDescIdDossierDesc(
-                commercant.getIdCommercant()
-            )
-            .stream()
-            .filter(this::isNewPdvProductRequest)
-            .count();
-    }
-
     private boolean isExtensionOwnedByCommercial(
         dossier_affiliation dossier,
         commerciale authenticatedCommerciale
@@ -2860,91 +3089,6 @@ public class StaffAffiliationManagementService {
         nouveauContrat.setCommercialReportFileName(dossier.getCommercialReportFileName());
         nouveauContrat.setCommercialReportGeneratedAt(dossier.getCommercialReportGeneratedAt());
         contratRepository.save(nouveauContrat);
-    }
-
-    private void provisionRequestedTerminals(dossier_affiliation dossier, pdv acceptedPdv) {
-        if (dossier == null || acceptedPdv == null || acceptedPdv.getIdPDV() == null) {
-            return;
-        }
-
-        TypeAffiliation typeAffiliation = dossier.getTypeAffiliation();
-        int requestedCount = resolveRequestedTerminalCount(dossier);
-        if (typeAffiliation == null || requestedCount <= 0) {
-            return;
-        }
-
-        long existingCount = tpeRepository.countByPdv_IdPDV(acceptedPdv.getIdPDV());
-        int missingCount = requestedCount - (int) existingCount;
-        if (missingCount <= 0) {
-            return;
-        }
-
-        for (int index = 1; index <= missingCount; index++) {
-            tpe terminal = new tpe();
-            terminal.setNumeroSerie(generateTerminalSerial(dossier, acceptedPdv, index));
-            terminal.setModele(resolveTerminalModel(dossier));
-            terminal.setTypeCompatible(typeAffiliation.name());
-            terminal.setTypeConnexion(resolveTerminalConnection(dossier));
-            terminal.setStatut("AFFECTE_COMMERCANT");
-            terminal.setActif(Boolean.TRUE);
-            terminal.setDateActivation(LocalDate.now());
-            terminal.setDateAffectationCommerciale(LocalDate.now());
-            terminal.setPdv(acceptedPdv);
-            terminal.setCommerciale(dossier.getCommerciale());
-            tpeRepository.save(terminal);
-        }
-    }
-
-    private int resolveRequestedTerminalCount(dossier_affiliation dossier) {
-        TypeAffiliation typeAffiliation = dossier.getTypeAffiliation();
-        if (typeAffiliation == null || typeAffiliation == TypeAffiliation.E_COMMERCE) {
-            return 0;
-        }
-        if (typeAffiliation == TypeAffiliation.TPE) {
-            Integer nombreTpe = dossier.getNombreTpe();
-            return nombreTpe == null || nombreTpe < 1 ? 1 : nombreTpe;
-        }
-        return 1;
-    }
-
-    private String resolveTerminalModel(dossier_affiliation dossier) {
-        TypeAffiliation typeAffiliation = dossier.getTypeAffiliation();
-        if (typeAffiliation == TypeAffiliation.TPE) {
-            return firstNotBlank(dossier.getEquipementTpe(), "TPE STANDARD");
-        }
-        if (typeAffiliation == TypeAffiliation.SOFTPOS || typeAffiliation == TypeAffiliation.QR_CODE) {
-            return firstNotBlank(dossier.getModeleQrSoftpos(), typeAffiliation.name());
-        }
-        return typeAffiliation == null ? "TERMINAL" : typeAffiliation.name();
-    }
-
-    private String resolveTerminalConnection(dossier_affiliation dossier) {
-        return firstNotBlank(
-            dossier.getConnectiviteTpe(),
-            dossier.getModeleQrSoftpos(),
-            dossier.getModeServiceEcommerce(),
-            "STANDARD"
-        );
-    }
-
-    private String generateTerminalSerial(dossier_affiliation dossier, pdv acceptedPdv, int index) {
-        String prefix = firstNotBlank(
-            dossier.getTypeAffiliation() == null ? "" : dossier.getTypeAffiliation().name(),
-            "TPE"
-        ).replace("_", "");
-        String base = "%s-PDV%s-D%s-%02d".formatted(
-            prefix,
-            acceptedPdv.getIdPDV(),
-            dossier.getIdDossier(),
-            index
-        );
-        String serial = base;
-        int attempt = 1;
-        while (tpeRepository.existsByNumeroSerie(serial)) {
-            attempt++;
-            serial = base + "-" + attempt;
-        }
-        return serial;
     }
 
     private String buildNewPdvContractAvailableEmailBody(
@@ -3671,6 +3815,34 @@ public class StaffAffiliationManagementService {
     }
 
     public record DocumentDownload(String fileName, String contentType, byte[] content) {
+        // Records generent equals/hashCode/toString par identite de reference sur
+        // les champs tableau (Sonar S6218) : sans ceci, deux telechargements du
+        // meme document (memes octets) sont juges differents et toString()
+        // n'affiche que l'identite de l'array, pas son contenu utile.
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof DocumentDownload that)) {
+                return false;
+            }
+            return Objects.equals(fileName, that.fileName)
+                && Objects.equals(contentType, that.contentType)
+                && Arrays.equals(content, that.content);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(fileName, contentType, Arrays.hashCode(content));
+        }
+
+        @Override
+        public String toString() {
+            return "DocumentDownload[fileName=" + fileName
+                + ", contentType=" + contentType
+                + ", content=" + (content == null ? "null" : content.length + " octets") + "]";
+        }
     }
 
     private DocumentDownload toDocumentDownload(

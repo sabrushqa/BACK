@@ -16,5 +16,9 @@ public record ReclamationRequest(
     // tpeReference est le repli texte quand tpeId ne peut pas etre resolu
     // (TPE Oracle sans ligne locale) — voir entities/Reclamation.java.
                                 Long   merchantId,
-              @Size(max = 100)  String tpeReference
+              @Size(max = 100)  String tpeReference,
+    // Label court (2-4 mots, ex: "Ecran noir TPE") genere par le chatbot —
+    // voir entities/Reclamation.java::resumeCourt. Optionnel : absent quand
+    // la reclamation n'est pas creee via le chatbot.
+              @Size(max = 60)   String resumeCourt
 ) {}

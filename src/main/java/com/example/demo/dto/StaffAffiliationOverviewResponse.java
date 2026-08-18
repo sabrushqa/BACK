@@ -143,7 +143,9 @@ public record StaffAffiliationOverviewResponse(List<AffiliationRequestItem> requ
         String requestedPdvTelephone,
         String requestedPdvEmail,
         String requestedPdvStatut,
+        boolean requestedPdvDejaExistant,
         boolean tpeDejaAffecte,
+        boolean ecommerceSiteDejaAffecte,
         Integer nombreCorrections,
         String dernierMotifCorrection
     ) {

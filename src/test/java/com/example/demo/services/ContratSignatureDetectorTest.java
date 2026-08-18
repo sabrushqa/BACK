@@ -78,6 +78,40 @@ class ContratSignatureDetectorTest {
     }
 
     @Test
+    void printedSignatureLabelAndEmptyBoxAreNotMistakenForSignature() throws Exception {
+        try (PDDocument document = new PDDocument()) {
+            PDPage page = new PDPage();
+            document.addPage(page);
+            float width = page.getMediaBox().getWidth();
+            float height = page.getMediaBox().getHeight();
+            try (PDPageContentStream contentStream = new PDPageContentStream(document, page)) {
+                contentStream.beginText();
+                contentStream.setFont(PDType1Font.HELVETICA_BOLD, 10);
+                contentStream.newLineAtOffset(width * 0.05f, height * 0.14f);
+                contentStream.showText("Cachet et signature de l'adherent");
+                contentStream.endText();
+                contentStream.addRect(
+                    width * 0.048f,
+                    height * 0.067f,
+                    width * 0.447f,
+                    height * 0.055f
+                );
+                contentStream.stroke();
+            }
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+            document.save(outputStream);
+            MockMultipartFile blankGeneratedContract = new MockMultipartFile(
+                "file",
+                "contrat-affiliation-vierge.pdf",
+                "application/pdf",
+                outputStream.toByteArray()
+            );
+
+            assertThat(contratSignatureDetector.estZoneSignatureRemplie(blankGeneratedContract)).isFalse();
+        }
+    }
+
+    @Test
     void filledSignatureZoneIsDetectedAsSigned() throws Exception {
         MockMultipartFile signedContract = buildPdfWithFilledSignatureZone();
 
@@ -97,6 +131,11 @@ class ContratSignatureDetectorTest {
             float y0 = height * 0.08f;
             float y1 = height * 0.14f;
             try (PDPageContentStream contentStream = new PDPageContentStream(document, page)) {
+                contentStream.beginText();
+                contentStream.setFont(PDType1Font.HELVETICA, 10);
+                contentStream.newLineAtOffset(50, 700);
+                contentStream.showText("Cachet et signature de l'adherent");
+                contentStream.endText();
                 contentStream.setNonStrokingColor(Color.BLACK);
                 contentStream.addRect(x0, y0, x1 - x0, y1 - y0);
                 contentStream.fill();
@@ -150,12 +189,18 @@ class ContratSignatureDetectorTest {
         assertThat(contratSignatureDetector.estZoneSignatureRemplie(corrupt)).isFalse();
     }
 
+    @Test
+    void unreadablePdfIsRejectedFailClosed() {
+        MockMultipartFile corrupt = new MockMultipartFile(
+            "file", "contrat.pdf", "application/pdf", "not-a-real-pdf".getBytes()
+        );
+
+        assertThat(contratSignatureDetector.estZoneSignatureRemplie(corrupt)).isFalse();
+    }
+
     private void addSignedPage(PDDocument document, boolean signed) throws Exception {
         PDPage page = new PDPage();
         document.addPage(page);
-        if (!signed) {
-            return;
-        }
         float width = page.getMediaBox().getWidth();
         float height = page.getMediaBox().getHeight();
         float x0 = width * 0.05f;
@@ -163,6 +208,14 @@ class ContratSignatureDetectorTest {
         float y0 = height * 0.08f;
         float y1 = height * 0.14f;
         try (PDPageContentStream contentStream = new PDPageContentStream(document, page)) {
+            contentStream.beginText();
+            contentStream.setFont(PDType1Font.HELVETICA, 10);
+            contentStream.newLineAtOffset(50, 700);
+            contentStream.showText("Cachet et signature de l'adherent");
+            contentStream.endText();
+            if (!signed) {
+                return;
+            }
             contentStream.setNonStrokingColor(Color.BLACK);
             contentStream.addRect(x0, y0, x1 - x0, y1 - y0);
             contentStream.fill();
@@ -201,10 +254,10 @@ class ContratSignatureDetectorTest {
     }
 
     @Test
-    void acceptsMultiSectionContractWhenMoreSectionsSignedThanRequired() throws Exception {
+    void rejectsMultiSectionContractWhenItContainsUnexpectedExtraSection() throws Exception {
         MockMultipartFile file = buildMultiPagePdf(true, true, true);
 
-        assertThat(contratSignatureDetector.estZoneSignatureRemplie(file, 2)).isTrue();
+        assertThat(contratSignatureDetector.estZoneSignatureRemplie(file, 2)).isFalse();
     }
 
     @Test

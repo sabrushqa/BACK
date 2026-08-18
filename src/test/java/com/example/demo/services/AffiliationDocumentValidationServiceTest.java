@@ -23,7 +23,7 @@ import org.springframework.mock.web.MockMultipartFile;
 class AffiliationDocumentValidationServiceTest {
 
     private final AffiliationDocumentValidationService serviceDisabled =
-        new AffiliationDocumentValidationService(false, "http://127.0.0.1:9001");
+        new AffiliationDocumentValidationService(false, "http://127.0.0.1:9001", "");
 
     private HttpServer fakeApiServer;
 
@@ -98,7 +98,7 @@ class AffiliationDocumentValidationServiceTest {
     @Test
     void skipsWhenFileIsNotAnImage() {
         AffiliationDocumentValidationService validationService =
-            new AffiliationDocumentValidationService(true, "http://127.0.0.1:9001");
+            new AffiliationDocumentValidationService(true, "http://127.0.0.1:9001", "");
         MockMultipartFile file = new MockMultipartFile(
             "file", "doc.pdf", "application/pdf", new byte[] {1}
         );
@@ -112,7 +112,7 @@ class AffiliationDocumentValidationServiceTest {
     @Test
     void skipsWhenFileExceedsMaxSize() {
         AffiliationDocumentValidationService validationService =
-            new AffiliationDocumentValidationService(true, "http://127.0.0.1:9001");
+            new AffiliationDocumentValidationService(true, "http://127.0.0.1:9001", "");
         byte[] oversized = new byte[17 * 1024 * 1024];
         MockMultipartFile file = new MockMultipartFile("file", "doc.png", "image/png", oversized);
 
@@ -130,7 +130,7 @@ class AffiliationDocumentValidationServiceTest {
             "{\"valid\":true,\"detected_type\":\"CIN\",\"reason\":\"ok\"}"
         );
         AffiliationDocumentValidationService validationService =
-            new AffiliationDocumentValidationService(true, baseUrl);
+            new AffiliationDocumentValidationService(true, baseUrl, "");
 
         AffiliationDocumentValidationResponse response = validationService.validateDocument(
             "cinDocument",
@@ -150,7 +150,7 @@ class AffiliationDocumentValidationServiceTest {
             "{\"valid\":false,\"detected_type\":\"RIB\",\"reason\":\"mismatch\"}"
         );
         AffiliationDocumentValidationService validationService =
-            new AffiliationDocumentValidationService(true, baseUrl);
+            new AffiliationDocumentValidationService(true, baseUrl, "");
 
         AffiliationDocumentValidationResponse response = validationService.validateDocument(
             "cinDocument",
@@ -165,7 +165,7 @@ class AffiliationDocumentValidationServiceTest {
     void throwsIllegalArgumentWhenApiReturnsClientError() throws IOException {
         String baseUrl = startFakeApi("/api/validate", 400, "{\"error\":\"fichier illisible\"}");
         AffiliationDocumentValidationService validationService =
-            new AffiliationDocumentValidationService(true, baseUrl);
+            new AffiliationDocumentValidationService(true, baseUrl, "");
 
         assertThatThrownBy(() ->
             validationService.validateDocument(
@@ -180,7 +180,7 @@ class AffiliationDocumentValidationServiceTest {
     void throwsIllegalStateWhenApiReturnsServerError() throws IOException {
         String baseUrl = startFakeApi("/api/validate", 500, "{\"error\":\"crash interne\"}");
         AffiliationDocumentValidationService validationService =
-            new AffiliationDocumentValidationService(true, baseUrl);
+            new AffiliationDocumentValidationService(true, baseUrl, "");
 
         assertThatThrownBy(() ->
             validationService.validateDocument(
@@ -202,7 +202,7 @@ class AffiliationDocumentValidationServiceTest {
                 + "\"cle_rib\":\"45\",\"devise\":\"MAD\"}}"
         );
         AffiliationDocumentValidationService validationService =
-            new AffiliationDocumentValidationService(true, baseUrl);
+            new AffiliationDocumentValidationService(true, baseUrl, "");
 
         AffiliationDocumentValidationResponse response = validationService.validateDocument(
             "ribDocument",
@@ -223,7 +223,7 @@ class AffiliationDocumentValidationServiceTest {
             "{\"success\":true,\"document_class\":\"CIN\"}"
         );
         AffiliationDocumentValidationService validationService =
-            new AffiliationDocumentValidationService(true, baseUrl);
+            new AffiliationDocumentValidationService(true, baseUrl, "");
 
         AffiliationDocumentValidationResponse response = validationService.validateDocument(
             "ribDocument",
@@ -241,7 +241,7 @@ class AffiliationDocumentValidationServiceTest {
             "{\"success\":true,\"document_class\":\"RIB\",\"extraction\":{\"rib\":\"007-780-abc-45\"}}"
         );
         AffiliationDocumentValidationService validationService =
-            new AffiliationDocumentValidationService(true, baseUrl);
+            new AffiliationDocumentValidationService(true, baseUrl, "");
 
         AffiliationDocumentValidationResponse response = validationService.validateDocument(
             "ribDocument",
@@ -259,7 +259,7 @@ class AffiliationDocumentValidationServiceTest {
             "{\"success\":true,\"document_class\":\"RIB\",\"extraction\":{}}"
         );
         AffiliationDocumentValidationService validationService =
-            new AffiliationDocumentValidationService(true, baseUrl);
+            new AffiliationDocumentValidationService(true, baseUrl, "");
 
         AffiliationDocumentValidationResponse response = validationService.validateDocument(
             "ribDocument",
@@ -277,7 +277,7 @@ class AffiliationDocumentValidationServiceTest {
             "{\"valid\":true,\"detected_type\":\"CIN\"}"
         );
         AffiliationDocumentValidationService validationService =
-            new AffiliationDocumentValidationService(true, baseUrl);
+            new AffiliationDocumentValidationService(true, baseUrl, "");
 
         validationService.validateUploadedDocumentsOrThrow(
             Map.of(
@@ -290,7 +290,7 @@ class AffiliationDocumentValidationServiceTest {
     @Test
     void throwsIllegalStateWhenApiUnreachable() {
         AffiliationDocumentValidationService validationService =
-            new AffiliationDocumentValidationService(true, "http://127.0.0.1:1");
+            new AffiliationDocumentValidationService(true, "http://127.0.0.1:1", "");
 
         assertThatThrownBy(() ->
             validationService.validateDocument(
@@ -303,7 +303,7 @@ class AffiliationDocumentValidationServiceTest {
     @Test
     void throwsIllegalStateWhenProcessingApiUnreachable() {
         AffiliationDocumentValidationService validationService =
-            new AffiliationDocumentValidationService(true, "http://127.0.0.1:1");
+            new AffiliationDocumentValidationService(true, "http://127.0.0.1:1", "");
 
         assertThatThrownBy(() ->
             validationService.validateDocument(
@@ -317,7 +317,7 @@ class AffiliationDocumentValidationServiceTest {
     void throwsIllegalArgumentWhenProcessingApiReturnsClientError() throws IOException {
         String baseUrl = startFakeApi("/api/process", 400, "{\"error\":\"document illisible\"}");
         AffiliationDocumentValidationService validationService =
-            new AffiliationDocumentValidationService(true, baseUrl);
+            new AffiliationDocumentValidationService(true, baseUrl, "");
 
         assertThatThrownBy(() ->
             validationService.validateDocument(
@@ -332,7 +332,7 @@ class AffiliationDocumentValidationServiceTest {
     void throwsIllegalStateWhenProcessingApiReturnsServerError() throws IOException {
         String baseUrl = startFakeApi("/api/process", 500, "{\"error\":\"crash extraction\"}");
         AffiliationDocumentValidationService validationService =
-            new AffiliationDocumentValidationService(true, baseUrl);
+            new AffiliationDocumentValidationService(true, baseUrl, "");
 
         assertThatThrownBy(() ->
             validationService.validateDocument(

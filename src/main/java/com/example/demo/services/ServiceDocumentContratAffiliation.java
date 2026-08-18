@@ -13,8 +13,10 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -183,6 +185,24 @@ public class ServiceDocumentContratAffiliation {
         byte[] compteRenduPdf,
         List<DocumentAFusionner> documentsAFusionner
     ) {
+        return genererDossierComplet(dossier, documentsDeposes, contratPdf, compteRenduPdf, documentsAFusionner, List.of());
+    }
+
+    /**
+     * extensionSections : contrat(s) (et compte-rendu le cas echeant) de
+     * chaque demande d'extension (NOUVEAU_PDV) approuvee de ce commerçant,
+     * ajoutes a la suite du dossier principal — sans ca, le "dossier complet"
+     * telecharge ne reflete jamais qu'un commerçant a etendu son affiliation
+     * (nouveau PDV/TPE/canal e-commerce) apres l'affiliation initiale.
+     */
+    public byte[] genererDossierComplet(
+        dossier_affiliation dossier,
+        List<documents> documentsDeposes,
+        byte[] contratPdf,
+        byte[] compteRenduPdf,
+        List<DocumentAFusionner> documentsAFusionner,
+        List<byte[]> extensionSections
+    ) {
         List<byte[]> sections = new ArrayList<>();
         sections.add(
             renderPdf(contractTemplateRenderer.genererHtmlFicheAutoAffiliation(dossier, documentsDeposes))
@@ -199,6 +219,13 @@ public class ServiceDocumentContratAffiliation {
                 byte[] page = convertToMergeablePdf(document);
                 if (page != null) {
                     sections.add(page);
+                }
+            }
+        }
+        if (extensionSections != null) {
+            for (byte[] section : extensionSections) {
+                if (section != null && section.length > 0) {
+                    sections.add(section);
                 }
             }
         }
@@ -406,6 +433,16 @@ public class ServiceDocumentContratAffiliation {
             try {
                 LOGGER.info("Generation du contrat PDF via Chromium headless.");
                 return renderPdfWithChrome(htmlContent);
+            } catch (InterruptedException exception) {
+                // Sonar S2142 : ne jamais avaler InterruptedException sans re-interrompre
+                // le thread, sinon on efface un signal d'interruption demande par la JVM
+                // (ex: arret propre du serveur) — le fallback OpenHTMLToPDF reste
+                // identique, seul le statut d'interruption du thread est desormais propage.
+                Thread.currentThread().interrupt();
+                LOGGER.warn(
+                    "Rendu Chromium du contrat interrompu. Bascule vers OpenHTMLToPDF.",
+                    exception
+                );
             } catch (Exception exception) {
                 LOGGER.warn(
                     "Le rendu Chromium du contrat a echoue. Bascule vers OpenHTMLToPDF.",
@@ -526,13 +563,40 @@ public class ServiceDocumentContratAffiliation {
         }
     }
 
+    /**
+     * Cree un repertoire temporaire accessible au seul proprietaire du processus
+     * (permissions POSIX rwx------) au lieu du repertoire temp partage par defaut
+     * (Sonar S5443) : ce dossier contient le HTML/PDF d'un contrat en cours de
+     * generation (donnees personnelles du commercant) et ne doit pas etre
+     * lisible par d'autres utilisateurs locaux de la machine. Sur un OS sans
+     * permissions POSIX (Windows), on retombe sur le comportement par defaut.
+     */
+    // Visibilite package (au lieu de private) pour etre testable directement
+    // sans reflexion depuis le meme package (voir ServiceDocumentContratAffiliationTempDirectoryTest).
+    Path createRestrictedTempDirectory(String prefix) throws IOException {
+        try {
+            return Files.createTempDirectory(
+                prefix,
+                PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwx------"))
+            );
+        } catch (UnsupportedOperationException posixUnsupported) {
+            // Repli Windows (pas de permissions POSIX) : le systeme de fichiers
+            // n'a pas la meme notion de repertoire "publiquement inscriptible"
+            // qu'un /tmp Unix partage — le dossier temp y est deja scope par
+            // profil utilisateur (%LOCALAPPDATA%/Temp). Faux positif Sonar S5443
+            // sur ce repli precis, la branche POSIX ci-dessus reste la protection
+            // reelle sur les OS concernes par la regle.
+            return Files.createTempDirectory(prefix); // NOSONAR java:S5443
+        }
+    }
+
     private byte[] renderPdfWithChrome(String htmlContent) throws IOException, InterruptedException {
         String chromeExecutable = resolveChromeExecutable();
         if (!StringUtils.hasText(chromeExecutable)) {
             throw new IOException("Navigateur Chromium introuvable.");
         }
 
-        Path tempDirectory = Files.createTempDirectory("lana-contract-render-");
+        Path tempDirectory = createRestrictedTempDirectory("lana-contract-render-");
         Path htmlFile = tempDirectory.resolve("contract.html");
         Path pdfFile = tempDirectory.resolve("contract.pdf");
 
@@ -690,8 +754,59 @@ public class ServiceDocumentContratAffiliation {
     }
 
     public record ContratTelecharge(String nomFichier, String typeContenu, byte[] contenu) {
+        // Voir StaffAffiliationManagementService.DocumentDownload : equals/hashCode
+        // par defaut sur un champ tableau compare des references, pas le contenu
+        // (Sonar S6218).
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof ContratTelecharge that)) {
+                return false;
+            }
+            return Objects.equals(nomFichier, that.nomFichier)
+                && Objects.equals(typeContenu, that.typeContenu)
+                && Arrays.equals(contenu, that.contenu);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(nomFichier, typeContenu, Arrays.hashCode(contenu));
+        }
+
+        @Override
+        public String toString() {
+            return "ContratTelecharge[nomFichier=" + nomFichier
+                + ", typeContenu=" + typeContenu
+                + ", contenu=" + (contenu == null ? "null" : contenu.length + " octets") + "]";
+        }
     }
 
     public record DocumentAFusionner(String fileName, String contentType, byte[] content) {
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof DocumentAFusionner that)) {
+                return false;
+            }
+            return Objects.equals(fileName, that.fileName)
+                && Objects.equals(contentType, that.contentType)
+                && Arrays.equals(content, that.content);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(fileName, contentType, Arrays.hashCode(content));
+        }
+
+        @Override
+        public String toString() {
+            return "DocumentAFusionner[fileName=" + fileName
+                + ", contentType=" + contentType
+                + ", content=" + (content == null ? "null" : content.length + " octets") + "]";
+        }
     }
 }

@@ -6,4 +6,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface PPRepository extends JpaRepository<PP, Long> {
     Optional<PP> findByCommercant_IdCommercant(Long commercantId);
+    java.util.List<PP> findAllByCommercant_IdCommercantIn(java.util.List<Long> commercantIds);
+
 }

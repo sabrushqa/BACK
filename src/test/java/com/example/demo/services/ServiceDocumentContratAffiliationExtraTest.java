@@ -36,7 +36,7 @@ class ServiceDocumentContratAffiliationExtraTest {
 
     private ServiceDocumentContratAffiliation buildService(PdvRepository pdvRepository) {
         GenerateurModeleContratAffiliation templateRenderer =
-            new GenerateurModeleContratAffiliation(null, null, null, null);
+            new GenerateurModeleContratAffiliation(null, null, null, null, new PdfLogoProvider());
         return new ServiceDocumentContratAffiliation(
             templateRenderer,
             pdvRepository,

@@ -7,15 +7,21 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.example.demo.dto.MerchantPdvProductRequest;
+import com.example.demo.entities.back_office;
 import com.example.demo.entities.commercant;
+import com.example.demo.entities.commerciale;
 import com.example.demo.entities.dossier_affiliation;
 import com.example.demo.entities.pdv;
 import com.example.demo.entities.utilisateur;
 import com.example.demo.enums.RoleUser;
 import com.example.demo.enums.StatusDossier;
 import com.example.demo.enums.TypeAffiliation;
+import com.example.demo.enums.TypeNotification;
+import com.example.demo.repositories.BackOfficeRepository;
 import com.example.demo.repositories.CommercantRepository;
+import com.example.demo.repositories.CommercialeRepository;
 import com.example.demo.repositories.DossierAffiliationRepository;
+import com.example.demo.repositories.NotificationsRepository;
 import com.example.demo.repositories.PdvRepository;
 import com.example.demo.repositories.SousCommercantRepository;
 import com.example.demo.repositories.TpeRepository;
@@ -79,6 +85,18 @@ class MerchantWorkspacePdvProductValidationTest {
     @Autowired
     private KeycloakAdminService keycloakAdminService;
 
+    @Autowired
+    private SupervisorNotificationService supervisorNotificationService;
+
+    @Autowired
+    private NotificationsRepository notificationsRepository;
+
+    @Autowired
+    private CommercialeRepository commercialeRepository;
+
+    @Autowired
+    private BackOfficeRepository backOfficeRepository;
+
     private utilisateur persistUser(String email, RoleUser role) {
         utilisateur user = new utilisateur();
         user.setEmail(email);
@@ -119,7 +137,8 @@ class MerchantWorkspacePdvProductValidationTest {
             new MerchantPdvProductRequest(
                 "Nouveau PDV", "12 rue Test", "Casablanca", null, null, "0600000000", null,
                 "TPE", "1", "STANDARD", "GPRS", "ACHAT", null, null, null, null,
-                33.5731, -7.5898
+                33.5731, -7.5898,
+                null
             )
         ))
             .isInstanceOf(ResponseStatusException.class)
@@ -141,7 +160,8 @@ class MerchantWorkspacePdvProductValidationTest {
             new MerchantPdvProductRequest(
                 "Nouveau PDV", "12 rue Test", "Casablanca", null, null, "0600000000", null,
                 "TPE", "1", "STANDARD", "GPRS", "ACHAT", null, null, null, null,
-                33.5731, -7.5898
+                33.5731, -7.5898,
+                null
             )
         ))
             .isInstanceOf(ResponseStatusException.class)
@@ -158,7 +178,8 @@ class MerchantWorkspacePdvProductValidationTest {
             new MerchantPdvProductRequest(
                 "Nouveau PDV", "12 rue Test", "Casablanca", null, null, "0600000000", null,
                 "TPE", "1", "STANDARD", "GPRS", "ACHAT", null, null, null, null,
-                33.5731, -7.5898
+                33.5731, -7.5898,
+                null
             )
         ))
             .isInstanceOf(ResponseStatusException.class)
@@ -182,7 +203,8 @@ class MerchantWorkspacePdvProductValidationTest {
             new MerchantPdvProductRequest(
                 "Nouveau PDV", "12 rue Test", "Casablanca", null, null, "0600000000", null,
                 "TPE", "1", "STANDARD", "GPRS", "ACHAT", null, null, null, null,
-                33.5731, -7.5898
+                33.5731, -7.5898,
+                null
             )
         ))
             .isInstanceOf(ResponseStatusException.class)
@@ -222,7 +244,8 @@ class MerchantWorkspacePdvProductValidationTest {
                 null, null, null, null, null, null, null,
                 "E_COMMERCE", null, null, null, null, null,
                 null, "https://nouvelle-boutique.example.ma", null,
-                null, null
+                null, null,
+                null
             )
         ))
             .isInstanceOf(IllegalArgumentException.class)
@@ -249,7 +272,8 @@ class MerchantWorkspacePdvProductValidationTest {
                 null, null, null, null, null, null, null,
                 "E_COMMERCE", null, null, null, null, null,
                 "INTEGRATION_API", null, null,
-                null, null
+                null, null,
+                null
             )
         ))
             .isInstanceOf(IllegalArgumentException.class)
@@ -265,7 +289,8 @@ class MerchantWorkspacePdvProductValidationTest {
             new MerchantPdvProductRequest(
                 null, null, null, null, null, null, null,
                 "TPE", "1", "STANDARD", "GPRS", "ACHAT", null, null, null, null,
-                null, null
+                null, null,
+                null
             )
         ))
             .isInstanceOf(IllegalArgumentException.class)
@@ -290,6 +315,7 @@ class MerchantWorkspacePdvProductValidationTest {
             jwtService,
             keycloakAdminService,
             geocodingService,
+            supervisorNotificationService,
             60
         );
 
@@ -310,7 +336,8 @@ class MerchantWorkspacePdvProductValidationTest {
             new MerchantPdvProductRequest(
                 "Nouveau PDV Autogeocode", "5 avenue Test", "Fes", null, null, "0600000000", null,
                 "TPE", "1", "STANDARD", "GPRS", "ACHAT", null, null, null, null,
-                null, null
+                null, null,
+                null
             )
         );
 
@@ -320,5 +347,51 @@ class MerchantWorkspacePdvProductValidationTest {
             .orElseThrow();
         assertThat(saved.getLatitude()).isEqualTo(33.9);
         assertThat(saved.getLongitude()).isEqualTo(-6.9);
+    }
+
+    @Test
+    void notifiesTheCommercialAndBackOfficeAlreadyAssignedToThisMerchant() {
+        utilisateur merchantUser = persistUser("commercant.newpdv.notify@test.lanacash.ma", RoleUser.COMMERCANT);
+        commercant commercant = new commercant();
+        commercant.setUtilisateur(merchantUser);
+        commercant = commercantRepository.save(commercant);
+
+        utilisateur commercialUser = persistUser("commercial.newpdv.notify@test.lanacash.ma", RoleUser.COMMERCIAL);
+        commerciale commerciale = new commerciale();
+        commerciale.setUtilisateur(commercialUser);
+        commerciale = commercialeRepository.save(commerciale);
+
+        utilisateur boaUser = persistUser("boa.newpdv.notify@test.lanacash.ma", RoleUser.BACK_OFFICE);
+        back_office backOffice = new back_office();
+        backOffice.setUtilisateur(boaUser);
+        backOffice = backOfficeRepository.save(backOffice);
+
+        dossier_affiliation acceptedDossier = new dossier_affiliation();
+        acceptedDossier.setCommercant(commercant);
+        acceptedDossier.setCommerciale(commerciale);
+        acceptedDossier.setBackOffice(backOffice);
+        acceptedDossier.setStatus(StatusDossier.ACCEPTE);
+        acceptedDossier.setTypeAffiliation(TypeAffiliation.TPE);
+        acceptedDossier.setDateSoumission(LocalDate.now());
+        dossierAffiliationRepository.save(acceptedDossier);
+
+        merchantWorkspaceManagementService.requestNewPdvProduct(
+            "Bearer " + tokenFor(merchantUser),
+            new MerchantPdvProductRequest(
+                "Nouveau PDV Notify", "8 rue Test", "Rabat", null, null, "0600000000", null,
+                "TPE", "1", "STANDARD", "GPRS", "ACHAT", null, null, null, null,
+                33.5731, -7.5898,
+                null
+            )
+        );
+
+        // Meme commercial et meme BOA que le dossier principal (continuite
+        // d'affectation), tous deux notifies de la nouvelle demande.
+        assertThat(notificationsRepository.findAll())
+            .anyMatch(n -> n.getUtilisateur().getId().equals(commercialUser.getId())
+                && n.getTypeNotification() == TypeNotification.DOSSIER_ASSIGNE);
+        assertThat(notificationsRepository.findAll())
+            .anyMatch(n -> n.getUtilisateur().getId().equals(boaUser.getId())
+                && n.getTypeNotification() == TypeNotification.DOSSIER_A_VALIDER_BOA);
     }
 }

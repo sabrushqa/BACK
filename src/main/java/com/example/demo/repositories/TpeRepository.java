@@ -21,6 +21,8 @@ public interface TpeRepository extends JpaRepository<tpe, Long> {
 
     long countByPdv_IdPDV(Long pdvId);
 
+    long countByPdv_IdPDVAndStatut(Long pdvId, String statut);
+
     long countByPdv_SousCommercant_Utilisateur_Id(Long utilisateurId);
 
     List<tpe> findTop8ByPdv_Commercant_IdCommercantOrderByIdTPEDesc(Long commercantId);

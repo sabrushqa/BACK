@@ -76,7 +76,7 @@ class ReclamationServiceExtraTest {
 
         var response = reclamationService.createReclamation(
             "Bearer " + tokenFor(merchantUser),
-            new ReclamationRequest("CHAT-001", "CONNECTIVITE", "Le TPE ne se connecte plus", "HAUTE", null, "Urgent", null, null)
+            new ReclamationRequest("CHAT-001", "CONNECTIVITE", "Le TPE ne se connecte plus", "HAUTE", null, "Urgent", null, null, null)
         );
 
         assertThat(response.idReclamation()).isNotNull();
@@ -269,31 +269,31 @@ class ReclamationServiceExtraTest {
         assertThat(
             reclamationService.createReclamation(
                 authHeader,
-                new ReclamationRequest("CHAT-A", "network", "Reseau instable", "CRITICAL", null, null, null, null)
+                new ReclamationRequest("CHAT-A", "network", "Reseau instable", "CRITICAL", null, null, null, null, null)
             ).typeProbleme()
         ).isEqualTo("CONNECTIVITE");
         assertThat(
             reclamationService.createReclamation(
                 authHeader,
-                new ReclamationRequest("CHAT-B", "transaction", "Transaction refusee", "LOW", null, null, null, null)
+                new ReclamationRequest("CHAT-B", "transaction", "Transaction refusee", "LOW", null, null, null, null, null)
             ).priorite()
         ).isEqualTo("BASSE");
         assertThat(
             reclamationService.createReclamation(
                 authHeader,
-                new ReclamationRequest("CHAT-C", "hardware", "TPE casse", "unknown-priority", null, null, null, null)
+                new ReclamationRequest("CHAT-C", "hardware", "TPE casse", "unknown-priority", null, null, null, null, null)
             ).priorite()
         ).isEqualTo("MOYENNE");
         assertThat(
             reclamationService.createReclamation(
                 authHeader,
-                new ReclamationRequest("CHAT-D", "software", "Bug ecran", "HIGH", null, null, null, null)
+                new ReclamationRequest("CHAT-D", "software", "Bug ecran", "HIGH", null, null, null, null, null)
             ).typeProbleme()
         ).isEqualTo("LOGICIEL");
         assertThat(
             reclamationService.createReclamation(
                 authHeader,
-                new ReclamationRequest("CHAT-E", "type-inconnu", "Autre probleme", "MOYENNE", null, null, null, null)
+                new ReclamationRequest("CHAT-E", "type-inconnu", "Autre probleme", "MOYENNE", null, null, null, null, null)
             ).typeProbleme()
         ).isEqualTo("AUTRE");
     }
@@ -316,7 +316,7 @@ class ReclamationServiceExtraTest {
 
         var response = reclamationService.createReclamation(
             "Bearer " + tokenFor(merchantUser),
-            new ReclamationRequest("CHAT-TPE", "CONNECTIVITE", "Le TPE plante", "HAUTE", terminal.getIdTPE(), null, null, null)
+            new ReclamationRequest("CHAT-TPE", "CONNECTIVITE", "Le TPE plante", "HAUTE", terminal.getIdTPE(), null, null, null, null)
         );
 
         assertThat(response.tpeNumeroSerie()).isEqualTo("TPE-RECLAMATION-1");

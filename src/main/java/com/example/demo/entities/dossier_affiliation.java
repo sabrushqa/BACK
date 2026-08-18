@@ -87,6 +87,13 @@ public class dossier_affiliation {
 
     private String siteMarchandUrl;
 
+    // Identifiant du site e-commerce affecte cote switch-monetique-service
+    // (table site_ecommerce). Rempli uniquement au moment de l'affectation
+    // reelle (voir SupervisorManagementService::assignEcommerceSiteToCommercant),
+    // jamais a la creation du dossier — c'est l'equivalent, pour le canal
+    // e-commerce, de l'affectation d'une reference TPE.
+    private String idSiteEcommerceAffecte;
+
     private String applicationMobile;
 
     private String commissionLocaleEcommerce;
@@ -142,6 +149,13 @@ public class dossier_affiliation {
     @ManyToOne
     @JoinColumn(name = "requested_pdv_id")
     private pdv requestedPdv;
+
+    // true uniquement pour une extension (NOUVEAU_PDV) qui reutilise un point
+    // de vente DEJA existant du commercant (juste plus de TPE dessus) plutot
+    // que d'en creer un nouveau — requestedPdv pointe dans les deux cas vers
+    // un pdv, ce flag est le seul moyen de distinguer les deux cas cote UI
+    // (voir MerchantWorkspaceManagementService::requestNewPdvProduct).
+    private Boolean requestedPdvDejaExistant;
 
     private String motifRefus;
 

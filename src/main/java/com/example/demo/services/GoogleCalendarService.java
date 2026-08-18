@@ -12,6 +12,7 @@ import com.example.demo.enums.RoleUser;
 import com.example.demo.repositories.GoogleCalendarConnectionRepository;
 import com.example.demo.repositories.InteractionCommercialeRepository;
 import com.example.demo.repositories.UtilisateurRepository;
+import com.example.demo.util.UrlUtils;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -88,13 +89,13 @@ public class GoogleCalendarService {
         this.restClient = restClientBuilder.build();
         this.clientId = normalize(clientId);
         this.clientSecret = normalize(clientSecret);
-        this.frontendBaseUrl = stripTrailingSlash(frontendBaseUrl);
+        this.frontendBaseUrl = UrlUtils.stripTrailingSlash(normalize(frontendBaseUrl));
         this.redirectUri = StringUtils.hasText(configuredRedirectUri)
             ? configuredRedirectUri.trim()
             : this.frontendBaseUrl + "/commercial/calendrier";
-        this.authorizationEndpoint = stripTrailingSlash(authorizationEndpoint);
+        this.authorizationEndpoint = UrlUtils.stripTrailingSlash(normalize(authorizationEndpoint));
         this.tokenEndpoint = tokenEndpoint == null ? "" : tokenEndpoint.trim();
-        this.calendarApiBaseUrl = stripTrailingSlash(calendarApiBaseUrl);
+        this.calendarApiBaseUrl = UrlUtils.stripTrailingSlash(normalize(calendarApiBaseUrl));
     }
 
     @Transactional(readOnly = true)
@@ -465,9 +466,6 @@ public class GoogleCalendarService {
         return value == null ? "" : value.trim();
     }
 
-    private String stripTrailingSlash(String value) {
-        return normalize(value).replaceAll("/+$", "");
-    }
 
     public record SyncResult(
         boolean attempted,

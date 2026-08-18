@@ -1,6 +1,7 @@
 package com.example.demo.services;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
@@ -83,6 +84,9 @@ class MerchantWorkspaceSubMerchantCreationSuccessTest {
     @Autowired
     private GeocodingService geocodingService;
 
+    @Autowired
+    private SupervisorNotificationService supervisorNotificationService;
+
     private utilisateur persistUser(String email, RoleUser role) {
         utilisateur user = new utilisateur();
         user.setEmail(email);
@@ -112,6 +116,7 @@ class MerchantWorkspaceSubMerchantCreationSuccessTest {
             jwtService,
             keycloakAdminService,
             geocodingService,
+            supervisorNotificationService,
             60
         );
     }
@@ -199,10 +204,15 @@ class MerchantWorkspaceSubMerchantCreationSuccessTest {
         assertThat(reloadedPdv.getSousCommercant().getEmail()).isEqualTo(subEmail);
     }
 
+    /**
+     * Decision produit : la creation de sous-commercant n'est proposee que pour
+     * le canal encaissement (TPE), jamais pour le canal e-commerce — ni pour un
+     * commercant e-commerce pur, ni pour le cote e-commerce d'un commercant a
+     * affiliation combinee (cf. CommercantSubCommercantsPage.tsx cote frontend).
+     */
     @Test
-    void createsSubMerchantAttachedToEcommerceChannelEndToEnd() {
+    void rejectsSubMerchantCreationForPureEcommerceMerchant() {
         RestClient.Builder builder = RestClient.builder();
-        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         KeycloakAdminService keycloakAdminService = new KeycloakAdminService(
             builder, true, SERVER_URL, REALM, "portail-affiliation",
             "master", "admin-cli", "admin", "admin-password", false
@@ -222,19 +232,49 @@ class MerchantWorkspaceSubMerchantCreationSuccessTest {
         dossierAffiliationRepository.save(acceptedDossier);
 
         String subEmail = "sous.commercant.ecommerce@test.lanacash.ma";
-        expectProvisioningSequence(server, subEmail, "kc-sub-ecommerce");
 
-        MerchantSubMerchantCreateResponse response = service.createSubMerchant(
-            "Bearer " + tokenFor(merchantUser),
-            new MerchantSubMerchantCreateRequest(null, "SITE_MARCHAND", "Tazi", "Yasmine", subEmail, "0600000003")
+        assertThatThrownBy(() ->
+            service.createSubMerchant(
+                "Bearer " + tokenFor(merchantUser),
+                new MerchantSubMerchantCreateRequest(null, "SITE_MARCHAND", "Tazi", "Yasmine", subEmail, "0600000003")
+            )
+        )
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("canal e-commerce");
+    }
+
+    @Test
+    void rejectsSubMerchantCreationForCombinedAffiliationInEcommerceSpace() {
+        RestClient.Builder builder = RestClient.builder();
+        KeycloakAdminService keycloakAdminService = new KeycloakAdminService(
+            builder, true, SERVER_URL, REALM, "portail-affiliation",
+            "master", "admin-cli", "admin", "admin-password", false
         );
+        MerchantWorkspaceManagementService service = buildServiceWithMockKeycloak(keycloakAdminService);
 
-        assertThat(response.id()).isNotNull();
-        assertThat(response.message()).contains("canal");
-        server.verify();
+        utilisateur merchantUser = persistUser("commercant.subcreate.combined@test.lanacash.ma", RoleUser.COMMERCANT);
+        commercant commercant = new commercant();
+        commercant.setUtilisateur(merchantUser);
+        commercant = commercantRepository.save(commercant);
 
-        var savedSousCommercant = sousCommercantRepository.findById(response.id()).orElseThrow();
-        assertThat(savedSousCommercant.getCanalEcommerce()).isEqualTo("SITE_MARCHAND");
-        assertThat(savedSousCommercant.getEmail()).isEqualTo(subEmail);
+        dossier_affiliation acceptedDossier = new dossier_affiliation();
+        acceptedDossier.setCommercant(commercant);
+        acceptedDossier.setStatus(StatusDossier.ACCEPTE);
+        acceptedDossier.setTypeAffiliation(TypeAffiliation.ENCAISSEMENT_ET_ECOMMERCE);
+        acceptedDossier.setDateSoumission(LocalDate.now());
+        dossierAffiliationRepository.save(acceptedDossier);
+
+        String subEmail = "sous.commercant.combined@test.lanacash.ma";
+
+        assertThatThrownBy(() ->
+            service.createSubMerchant(
+                "Bearer " + tokenFor(merchantUser),
+                new MerchantSubMerchantCreateRequest(null, "APPLICATION_MOBILE", "Sara", "Lak", subEmail, "0601020304")
+            )
+        )
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("canal e-commerce");
+
+        assertThat(utilisateurRepository.existsByEmailIgnoreCase(subEmail)).isFalse();
     }
 }

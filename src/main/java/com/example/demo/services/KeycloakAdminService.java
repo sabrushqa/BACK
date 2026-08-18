@@ -2,6 +2,7 @@ package com.example.demo.services;
 
 import com.example.demo.entities.utilisateur;
 import com.example.demo.enums.RoleUser;
+import com.example.demo.util.UrlUtils;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -54,7 +55,7 @@ public class KeycloakAdminService {
     ) {
         this.restClient = restClientBuilder.build();
         this.enabled = enabled;
-        this.serverUrl = stripTrailingSlash(serverUrl);
+        this.serverUrl = UrlUtils.stripTrailingSlash(serverUrl);
         this.realm = realm;
         this.clientId = clientId;
         this.adminRealm = adminRealm;
@@ -761,9 +762,6 @@ public class KeycloakAdminService {
             : List.of("UPDATE_PASSWORD");
     }
 
-    private String stripTrailingSlash(String value) {
-        return value == null ? "" : value.replaceAll("/+$", "");
-    }
 
     private URI uri(String pathAndQuery) {
         String normalizedPath = pathAndQuery == null || pathAndQuery.startsWith("/")

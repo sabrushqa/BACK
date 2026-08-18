@@ -56,22 +56,31 @@ public class MerchantContractManagementService {
     }
 
     @Transactional(readOnly = true)
-    public ContratTelecharge downloadLatestContratGenere(String authorizationHeader) {
+    public ServiceDocumentContratAffiliation.ContratTelecharge downloadLatestContratGenere(String authorizationHeader) {
         dossier_affiliation dossier = readLatestMerchantDossier(authorizationHeader);
-        return toContratTelecharge(serviceDocumentContratAffiliation.telechargerFichier(dossier.getGeneratedContractPath()));
+        return serviceDocumentContratAffiliation.telechargerFichier(dossier.getGeneratedContractPath());
     }
 
-    public ContractSignatureVerificationResponse verifySignature(MultipartFile file) {
-        if (!contratSignatureDetector.estFichierContratLanaCash(file)) {
+    public ContractSignatureVerificationResponse verifySignature(
+        String authorizationHeader,
+        MultipartFile file
+    ) {
+        dossier_affiliation dossier = readLatestMerchantDossier(authorizationHeader);
+        if (!isSignedContractUploadAllowed(dossier.getStatus())) {
+            return new ContractSignatureVerificationResponse(false,
+                "Ce dossier n'est pas actuellement en attente de signature.");
+        }
+        if (!contratSignatureDetector.estFichierContratLanaCash(file, dossier.getTypeAffiliation())) {
             return new ContractSignatureVerificationResponse(false,
                 "Ce fichier ne correspond pas au contrat d'affiliation Lana Cash. "
                     + "Déposez uniquement le contrat PDF généré par la plateforme.");
         }
-        boolean signed = contratSignatureDetector.estZoneSignatureRemplie(file);
+        int expectedSignedSections = serviceDocumentContratAffiliation.resolveExpectedSignatureSections(dossier);
+        boolean signed = contratSignatureDetector.estZoneSignatureRemplie(file, expectedSignedSections);
         String message = signed
-            ? "Signature détectée : le contrat semble correctement signé."
-            : "Aucune signature détectée : la zone de signature adhérent est vide. "
-                + "Apposez votre cachet et signature (précédés de \"lu et approuvé\") avant de soumettre.";
+            ? "Toutes les sections attendues du contrat semblent signées."
+            : "Contrat refusé : au moins une section attendue n'est pas signée ou le PDF est illisible. "
+                + "Apposez votre cachet et signature (précédés de \"lu et approuvé\") sur chaque section.";
         return new ContractSignatureVerificationResponse(signed, message);
     }
 
@@ -218,16 +227,4 @@ public class MerchantContractManagementService {
         return "";
     }
 
-    public record ContratTelecharge(String nomFichier, String typeContenu, byte[] contenu) {
-    }
-
-    private ContratTelecharge toContratTelecharge(
-        ServiceDocumentContratAffiliation.ContratTelecharge contractDownload
-    ) {
-        return new ContratTelecharge(
-            contractDownload.nomFichier(),
-            contractDownload.typeContenu(),
-            contractDownload.contenu()
-        );
-    }
 }

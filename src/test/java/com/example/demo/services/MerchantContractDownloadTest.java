@@ -88,11 +88,26 @@ class MerchantContractDownloadTest {
 
     @Test
     void verifySignatureRejectsNonLanaCashFile() {
+        utilisateur merchantUser = persistUser("commercant.verify.contrat@test.lanacash.ma");
+        commercant commercant = new commercant();
+        commercant.setUtilisateur(merchantUser);
+        commercant = commercantRepository.save(commercant);
+
+        dossier_affiliation dossier = new dossier_affiliation();
+        dossier.setCommercant(commercant);
+        dossier.setTypeAffiliation(TypeAffiliation.TPE);
+        dossier.setStatus(StatusDossier.CONTRAT_A_SIGNER);
+        dossier.setDateSoumission(LocalDate.now());
+        dossierAffiliationRepository.save(dossier);
+
         MockMultipartFile unrelated = new MockMultipartFile(
             "file", "document.pdf", "application/pdf", "not-a-real-contract".getBytes()
         );
 
-        var response = merchantContractManagementService.verifySignature(unrelated);
+        var response = merchantContractManagementService.verifySignature(
+            "Bearer " + tokenFor(merchantUser),
+            unrelated
+        );
 
         assertThat(response.signed()).isFalse();
     }

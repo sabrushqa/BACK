@@ -26,11 +26,13 @@ import com.example.demo.repositories.SousCommercantRepository;
 import com.example.demo.repositories.TpeRepository;
 import com.example.demo.repositories.TransactionsRepository;
 import com.example.demo.repositories.UtilisateurRepository;
+import com.example.demo.util.UrlUtils;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -101,7 +103,7 @@ public class MerchantAccessService {
         this.jwtService = jwtService;
         this.keycloakAdminService = keycloakAdminService;
         this.passwordResetExpirationMinutes = passwordResetExpirationMinutes;
-        this.frontendBaseUrl = stripTrailingSlash(frontendBaseUrl);
+        this.frontendBaseUrl = UrlUtils.stripTrailingSlash(frontendBaseUrl);
     }
 
     public MerchantSessionResponse activateAccount(ActivationAccountRequest request) {
@@ -292,7 +294,12 @@ public class MerchantAccessService {
             ))
             .toList();
 
-        List<ChatbotMerchantProfileResponse.TpeItem> tpeItems = buildTpeItemsForCommercant(localTpes, commercantId, pdvs)
+        List<ChatbotMerchantProfileResponse.TpeItem> tpeItems = buildTpeItemsForCommercant(
+                localTpes,
+                commercantId,
+                pdvs,
+                new java.util.concurrent.atomic.AtomicBoolean(false)
+            )
             .stream()
             .map(item -> new ChatbotMerchantProfileResponse.TpeItem(
                 item.numeroSerie(),
@@ -381,6 +388,24 @@ public class MerchantAccessService {
         // Tokens gérés par Keycloak côté client — pas de token interne généré ici.
         String accessToken = null;
         OffsetDateTime tokenExpiration = null;
+        // Partage entre les deux fusions ci-dessous (transactions + TPE) : un
+        // seul flag pour toute la session, pas un champ d'instance — ce
+        // service est un singleton partage entre requetes concurrentes.
+        java.util.concurrent.atomic.AtomicBoolean switchIndisponible =
+            new java.util.concurrent.atomic.AtomicBoolean(false);
+        // Fusionne l'historique local (auto-provisionné NOUVEAU_PDV) et l'historique
+        // réel côté switch-monetique-service (Oracle) — sans ça, le dashboard
+        // commerçant restait vide malgré des transactions bien enregistrées côté
+        // switch (voir SwitchMonetiqueClient::transactions).
+        List<MerchantSessionResponse.TransactionItem> transactionItems =
+            buildTransactionItemsForCommercant(transactions, commercantId, pdvs, switchIndisponible);
+        // Meme fusion local + Oracle que pour les transactions ci-dessus : sans
+        // elle, le compteur "Terminaux TPE" du profil affichait 0 pour tout
+        // commercant dont le TPE avait ete affecte via le flux BOA principal
+        // (assignTpeToCommercant, qui n'ecrit que cote switch Oracle, jamais
+        // dans la table locale tpes) malgre des transactions bien presentes.
+        List<MerchantSessionResponse.TpeItem> tpeItems =
+            buildTpeItemsForCommercant(tpes, commercantId, pdvs, switchIndisponible);
 
         return new MerchantSessionResponse(
             utilisateur.getId(),
@@ -396,14 +421,19 @@ public class MerchantAccessService {
             typeAffiliation,
             message,
             accessToken,
-            accessToken == null ? null : "Bearer",
+            // accessToken est toujours null ici (tokens geres par Keycloak cote
+            // client, cf. commentaire ci-dessus) : le type "Bearer" ne s'applique
+            // donc jamais sur ce chemin, contrairement au ternaire precedent qui
+            // laissait croire le contraire.
+            null,
             tokenExpiration,
             new MerchantSessionResponse.Summary(
-                transactionsRepository.countByTpe_Pdv_Commercant_IdCommercant(commercantId),
+                transactionItems.size(),
                 pdvRepository.countByCommercant_IdCommercant(commercantId),
-                tpeRepository.countByPdv_Commercant_IdCommercant(commercantId),
+                tpeItems.size(),
                 sousCommercants.size()
             ),
+            switchIndisponible.get(),
             new MerchantSessionResponse.Profile(
                 displayName,
                 safe(utilisateur.getEmail()),
@@ -442,32 +472,8 @@ public class MerchantAccessService {
                     pdv -> toPdvItem(pdv, workspaceUnlocked)
                 )
                 .toList(),
-            buildTpeItemsForCommercant(tpes, commercantId, pdvs),
-            transactions.stream()
-                .map(
-                    transaction ->
-                        new MerchantSessionResponse.TransactionItem(
-                            transaction.getIdTransaction(),
-                            transaction.getDateTransaction() == null
-                                ? ""
-                                : transaction.getDateTransaction().toString(),
-                            transaction.getHeureTransaction() == null
-                                ? ""
-                                : transaction.getHeureTransaction().toString(),
-                            transaction.getMontant(),
-                            safe(transaction.getDevise()),
-                            safe(transaction.getStatutTransaction()),
-                            safe(transaction.getTypePaiement()),
-                            transaction.getTpe() == null ? "" : safe(transaction.getTpe().getNumeroSerie()),
-                            transaction.getTpe() == null || transaction.getTpe().getPdv() == null
-                                ? null
-                                : transaction.getTpe().getPdv().getIdPDV(),
-                            transaction.getTpe() == null || transaction.getTpe().getPdv() == null
-                                ? ""
-                                : safe(transaction.getTpe().getPdv().getNomPDV())
-                        )
-                )
-                .toList(),
+            tpeItems,
+            transactionItems,
             true,
             true,
             true
@@ -518,6 +524,10 @@ public class MerchantAccessService {
         // Tokens gérés par Keycloak côté client — pas de token interne généré ici.
         String accessToken = null;
         OffsetDateTime tokenExpiration = null;
+        java.util.concurrent.atomic.AtomicBoolean switchIndisponible =
+            new java.util.concurrent.atomic.AtomicBoolean(false);
+        List<MerchantSessionResponse.TpeItem> tpeItems =
+            buildTpeItemsForSubMerchant(tpes, pdvs, switchIndisponible);
 
         return new MerchantSessionResponse(
             utilisateur.getId(),
@@ -533,7 +543,11 @@ public class MerchantAccessService {
             typeAffiliation,
             message,
             accessToken,
-            accessToken == null ? null : "Bearer",
+            // accessToken est toujours null ici (tokens geres par Keycloak cote
+            // client, cf. commentaire ci-dessus) : le type "Bearer" ne s'applique
+            // donc jamais sur ce chemin, contrairement au ternaire precedent qui
+            // laissait croire le contraire.
+            null,
             tokenExpiration,
             new MerchantSessionResponse.Summary(
                 transactionsRepository.countByTpe_Pdv_SousCommercant_Utilisateur_Id(utilisateur.getId()),
@@ -541,6 +555,7 @@ public class MerchantAccessService {
                 tpeRepository.countByPdv_SousCommercant_Utilisateur_Id(utilisateur.getId()),
                 0
             ),
+            switchIndisponible.get(),
             new MerchantSessionResponse.Profile(
                 displayName,
                 safe(utilisateur.getEmail()),
@@ -560,32 +575,8 @@ public class MerchantAccessService {
                     pdv -> toPdvItem(pdv, true)
                 )
                 .toList(),
-            buildTpeItemsForSubMerchant(tpes, pdvs),
-            transactions.stream()
-                .map(
-                    transaction ->
-                        new MerchantSessionResponse.TransactionItem(
-                            transaction.getIdTransaction(),
-                            transaction.getDateTransaction() == null
-                                ? ""
-                                : transaction.getDateTransaction().toString(),
-                            transaction.getHeureTransaction() == null
-                                ? ""
-                                : transaction.getHeureTransaction().toString(),
-                            transaction.getMontant(),
-                            safe(transaction.getDevise()),
-                            safe(transaction.getStatutTransaction()),
-                            safe(transaction.getTypePaiement()),
-                            transaction.getTpe() == null ? "" : safe(transaction.getTpe().getNumeroSerie()),
-                            transaction.getTpe() == null || transaction.getTpe().getPdv() == null
-                                ? null
-                                : transaction.getTpe().getPdv().getIdPDV(),
-                            transaction.getTpe() == null || transaction.getTpe().getPdv() == null
-                                ? ""
-                                : safe(transaction.getTpe().getPdv().getNomPDV())
-                        )
-                )
-                .toList(),
+            tpeItems,
+            transactions.stream().map(this::toLocalTransactionItem).toList(),
             true,
             true,
             true
@@ -665,7 +656,9 @@ public class MerchantAccessService {
      * TPE du commercant ne doit pas faire planter sa session pour une panne
      * d'un service tiers.
      */
-    private List<SwitchMonetiqueClient.SwitchTpe> fetchOracleStockSafely() {
+    private List<SwitchMonetiqueClient.SwitchTpe> fetchOracleStockSafely(
+        java.util.concurrent.atomic.AtomicBoolean switchIndisponible
+    ) {
         try {
             return switchMonetiqueClient.stockComplet();
         } catch (RuntimeException exception) {
@@ -674,6 +667,7 @@ public class MerchantAccessService {
                     + "liste de TPE Oracle indisponible pour cette session.",
                 exception
             );
+            switchIndisponible.set(true);
             return List.of();
         }
     }
@@ -724,13 +718,14 @@ public class MerchantAccessService {
     private List<MerchantSessionResponse.TpeItem> buildTpeItemsForCommercant(
         List<tpe> localTpes,
         Long commercantId,
-        List<pdv> pdvs
+        List<pdv> pdvs,
+        java.util.concurrent.atomic.AtomicBoolean switchIndisponible
     ) {
         List<MerchantSessionResponse.TpeItem> items = new ArrayList<>(localTpes.stream().map(this::toLocalTpeItem).toList());
         if (commercantId != null) {
             String idCommercant = commercantId.toString();
             items.addAll(mapOracleTpeItems(
-                fetchOracleStockSafely(),
+                fetchOracleStockSafely(switchIndisponible),
                 oracleTpe -> idCommercant.equals(oracleTpe.idCommercant()),
                 pdvs
             ));
@@ -745,15 +740,133 @@ public class MerchantAccessService {
      */
     private List<MerchantSessionResponse.TpeItem> buildTpeItemsForSubMerchant(
         List<tpe> localTpes,
-        List<pdv> visiblePdvs
+        List<pdv> visiblePdvs,
+        java.util.concurrent.atomic.AtomicBoolean switchIndisponible
     ) {
         List<MerchantSessionResponse.TpeItem> items = new ArrayList<>(localTpes.stream().map(this::toLocalTpeItem).toList());
         Set<String> visiblePdvIds = visiblePdvs.stream().map(p -> p.getIdPDV().toString()).collect(Collectors.toSet());
         items.addAll(mapOracleTpeItems(
-            fetchOracleStockSafely(),
+            fetchOracleStockSafely(switchIndisponible),
             oracleTpe -> oracleTpe.idPdv() != null && visiblePdvIds.contains(oracleTpe.idPdv()),
             visiblePdvs
         ));
+        return items;
+    }
+
+    private static final Comparator<MerchantSessionResponse.TransactionItem> TRANSACTION_DATE_DESC =
+        Comparator.comparing(
+            (MerchantSessionResponse.TransactionItem item) -> item.dateTransaction() + "T" + item.heureTransaction()
+        ).reversed();
+
+    private MerchantSessionResponse.TransactionItem toLocalTransactionItem(transactions transaction) {
+        // La table locale ne couvre que le flux d'auto-provisionnement
+        // NOUVEAU_PDV, toujours un encaissement TPE physique — jamais de
+        // l'e-commerce (pas de site marchand associe a ces lignes).
+        return new MerchantSessionResponse.TransactionItem(
+            String.valueOf(transaction.getIdTransaction()),
+            "TPE",
+            transaction.getDateTransaction() == null ? "" : transaction.getDateTransaction().toString(),
+            transaction.getHeureTransaction() == null ? "" : transaction.getHeureTransaction().toString(),
+            transaction.getMontant(),
+            safe(transaction.getDevise()),
+            safe(transaction.getStatutTransaction()),
+            safe(transaction.getTypePaiement()),
+            transaction.getTpe() == null ? "" : safe(transaction.getTpe().getNumeroSerie()),
+            transaction.getTpe() == null || transaction.getTpe().getPdv() == null
+                ? null
+                : transaction.getTpe().getPdv().getIdPDV(),
+            transaction.getTpe() == null || transaction.getTpe().getPdv() == null
+                ? ""
+                : safe(transaction.getTpe().getPdv().getNomPDV())
+        );
+    }
+
+    /**
+     * Recupere l'historique Oracle d'un commercant, en degradant gracieusement
+     * (log + liste vide) si switch-monetique-service est injoignable — meme
+     * logique defensive que fetchOracleStockSafely, pour la meme raison : une
+     * panne d'un service tiers non critique ne doit pas faire planter le
+     * dashboard commercant.
+     */
+    private List<SwitchMonetiqueClient.SwitchTransaction> fetchOracleTransactionsSafely(
+        Long commercantId,
+        java.util.concurrent.atomic.AtomicBoolean switchIndisponible
+    ) {
+        if (commercantId == null) {
+            return List.of();
+        }
+        try {
+            return switchMonetiqueClient.transactions(commercantId.toString());
+        } catch (RuntimeException exception) {
+            LOGGER.warn(
+                "[MerchantAccessService] switch-monetique-service injoignable, "
+                    + "liste de transactions Oracle indisponible pour le commerçant {}.",
+                commercantId,
+                exception
+            );
+            switchIndisponible.set(true);
+            return List.of();
+        }
+    }
+
+    private List<MerchantSessionResponse.TransactionItem> mapOracleTransactionItems(
+        List<SwitchMonetiqueClient.SwitchTransaction> oracleTransactions,
+        List<pdv> visiblePdvs,
+        java.util.concurrent.atomic.AtomicBoolean switchIndisponible
+    ) {
+        Map<String, pdv> pdvById = visiblePdvs.stream()
+            .collect(Collectors.toMap(p -> p.getIdPDV().toString(), p -> p, (a, b) -> a));
+        // Une transaction Oracle ne porte que l'id du TPE (ex: "TPE-000003"), pas
+        // le PDV local : on retrouve le PDV via le stock Oracle (idTpe -> idPdv),
+        // deja utilise pour la fusion des TPE (mapOracleTpeItems).
+        Map<String, String> pdvIdByOracleTpeId = fetchOracleStockSafely(switchIndisponible).stream()
+            .filter(stockTpe -> stockTpe.idPdv() != null)
+            .collect(Collectors.toMap(
+                SwitchMonetiqueClient.SwitchTpe::idTpe,
+                SwitchMonetiqueClient.SwitchTpe::idPdv,
+                (a, b) -> a
+            ));
+        return oracleTransactions.stream()
+            .map(transaction -> {
+                String idPdv = transaction.idTpe() == null ? null : pdvIdByOracleTpeId.get(transaction.idTpe());
+                pdv matchedPdv = idPdv == null ? null : pdvById.get(idPdv);
+                LocalDateTime dateTransaction = transaction.dateTransaction();
+                return new MerchantSessionResponse.TransactionItem(
+                    transaction.idTransaction(),
+                    safe(transaction.canal()),
+                    dateTransaction == null ? "" : dateTransaction.toLocalDate().toString(),
+                    dateTransaction == null ? "" : dateTransaction.toLocalTime().toString(),
+                    transaction.montant(),
+                    safe(transaction.devise()),
+                    safe(transaction.statut()),
+                    safe(transaction.mode()),
+                    firstNotBlank(transaction.idTpe(), transaction.idSiteEcommerce()),
+                    matchedPdv == null ? null : matchedPdv.getIdPDV(),
+                    matchedPdv == null ? "" : safe(matchedPdv.getNomPDV())
+                );
+            })
+            .toList();
+    }
+
+    /**
+     * Combine l'historique local (auto-provisionne NOUVEAU_PDV) et l'historique
+     * Oracle reellement enregistre par le switch (TPE + e-commerce) pour un
+     * commercant complet — meme principe que buildTpeItemsForCommercant.
+     */
+    private List<MerchantSessionResponse.TransactionItem> buildTransactionItemsForCommercant(
+        List<transactions> localTransactions,
+        Long commercantId,
+        List<pdv> pdvs,
+        java.util.concurrent.atomic.AtomicBoolean switchIndisponible
+    ) {
+        List<MerchantSessionResponse.TransactionItem> items =
+            new ArrayList<>(localTransactions.stream().map(this::toLocalTransactionItem).toList());
+        items.addAll(mapOracleTransactionItems(
+            fetchOracleTransactionsSafely(commercantId, switchIndisponible),
+            pdvs,
+            switchIndisponible
+        ));
+        items.sort(TRANSACTION_DATE_DESC);
         return items;
     }
 
@@ -810,9 +923,14 @@ public class MerchantAccessService {
             workspaceDetails.typeAffiliation(),
             message,
             accessToken,
-            accessToken == null ? null : "Bearer",
+            // accessToken est toujours null ici (tokens geres par Keycloak cote
+            // client, cf. commentaire ci-dessus) : le type "Bearer" ne s'applique
+            // donc jamais sur ce chemin, contrairement au ternaire precedent qui
+            // laissait croire le contraire.
+            null,
             tokenExpiration,
             new MerchantSessionResponse.Summary(0, 0, 0, 0),
+            false,
             new MerchantSessionResponse.Profile(
                 workspaceDetails.displayName(),
                 safe(utilisateur.getEmail()),
@@ -935,9 +1053,6 @@ public class MerchantAccessService {
         return value == null ? null : value.trim().toLowerCase(Locale.ROOT);
     }
 
-    private String stripTrailingSlash(String value) {
-        return value == null ? "" : value.replaceAll("/+$", "");
-    }
 
     private String safe(String value) {
         return Objects.requireNonNullElse(value, "");

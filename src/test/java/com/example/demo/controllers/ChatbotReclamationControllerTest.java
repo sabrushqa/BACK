@@ -59,7 +59,8 @@ class ChatbotReclamationControllerTest {
             tpeId,
             "Commentaire optionnel",
             merchantId,
-            tpeReference
+            tpeReference,
+            null
         );
     }
 

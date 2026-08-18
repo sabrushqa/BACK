@@ -332,10 +332,15 @@ class JwtServiceTest {
         when(utilisateurRepository.findByKeycloakId("kc-sub-missing")).thenReturn(Optional.empty());
         when(utilisateurRepository.findByEmailIgnoreCase("missing@test.lanacash.ma")).thenReturn(Optional.empty());
 
+        // Le message renvoye au client reste generique : les details (email/sub)
+        // ne doivent jamais fuiter cote reponse HTTP, sinon un attaquant peut
+        // enumerer les comptes existants en observant les differences de message.
+        // Ces details sont uniquement journalises cote serveur (JwtService.keycloakUserNotFound).
         assertThatThrownBy(() -> jwtService.extractUserId("some-token"))
             .isInstanceOf(ResponseStatusException.class)
-            .hasMessageContaining("missing@test.lanacash.ma")
-            .hasMessageContaining("kc-sub-missing");
+            .hasMessageContaining("Authentification Keycloak invalide.")
+            .extracting(throwable -> ((ResponseStatusException) throwable).getStatusCode())
+            .isEqualTo(org.springframework.http.HttpStatus.UNAUTHORIZED);
     }
 
     @Test
@@ -347,9 +352,13 @@ class JwtServiceTest {
 
         when(utilisateurRepository.findByKeycloakId("kc-sub-noemail")).thenReturn(Optional.empty());
 
+        // Meme raisonnement que ci-dessus : message client generique, le detail
+        // "scope email manquant" n'est journalise que cote serveur.
         assertThatThrownBy(() -> jwtService.extractUserId("some-token"))
             .isInstanceOf(ResponseStatusException.class)
-            .hasMessageContaining("scope email");
+            .hasMessageContaining("Authentification Keycloak invalide.")
+            .extracting(throwable -> ((ResponseStatusException) throwable).getStatusCode())
+            .isEqualTo(org.springframework.http.HttpStatus.UNAUTHORIZED);
     }
 
     private void stubDecoderClaims(Map<String, Object> claims) {

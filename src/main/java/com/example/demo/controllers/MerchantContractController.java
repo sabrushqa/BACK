@@ -4,6 +4,7 @@ import com.example.demo.dto.AffiliationActionResponse;
 import com.example.demo.dto.ContractSignatureVerificationResponse;
 import com.example.demo.dto.MerchantContractOverviewResponse;
 import com.example.demo.services.MerchantContractManagementService;
+import com.example.demo.services.ServiceDocumentContratAffiliation;
 import java.nio.charset.StandardCharsets;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.ContentDisposition;
@@ -54,7 +55,7 @@ public class MerchantContractController {
     public ResponseEntity<ByteArrayResource> downloadLatestContract(
         @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader
     ) {
-        MerchantContractManagementService.ContratTelecharge contractDownload =
+        ServiceDocumentContratAffiliation.ContratTelecharge contractDownload =
             merchantContractManagementService.downloadLatestContratGenere(authorizationHeader);
 
         return ResponseEntity.ok()
@@ -72,9 +73,12 @@ public class MerchantContractController {
 
     @PostMapping(value = "/verify-signature", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ContractSignatureVerificationResponse> verifySignature(
+        @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader,
         @RequestParam("file") MultipartFile file
     ) {
-        return ResponseEntity.ok(merchantContractManagementService.verifySignature(file));
+        return ResponseEntity.ok(
+            merchantContractManagementService.verifySignature(authorizationHeader, file)
+        );
     }
 
     @PostMapping(value = "/latest/upload-signed", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

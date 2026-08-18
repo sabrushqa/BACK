@@ -83,7 +83,8 @@ class MerchantWorkspaceCreationTest {
             new MerchantPdvProductRequest(
                 "Nouveau PDV", "12 rue Test", "Casablanca", null, null, "0600000000", null,
                 "TPE", "1", "STANDARD", "GPRS", "ACHAT", null, null, null, null,
-                33.5731, -7.5898
+                33.5731, -7.5898,
+                null
             )
         );
 
@@ -110,7 +111,8 @@ class MerchantWorkspaceCreationTest {
                 null, null, null, null, null, null, null,
                 "E_COMMERCE", null, null, null, null, null,
                 "INTEGRATION_API", "https://nouvelle-boutique.example.ma", null,
-                null, null
+                null, null,
+                null
             )
         );
 
@@ -118,8 +120,196 @@ class MerchantWorkspaceCreationTest {
     }
 
     @Test
-    void rejectsEcommerceRequestForTpeMerchant() {
-        utilisateur merchantUser = persistUser("commercant.newpdv.incompatible@test.lanacash.ma", RoleUser.COMMERCANT);
+    void addsMoreTpeOnAnExistingPdvWithoutCreatingANewOne() {
+        // Le commercant a deja un point de vente et veut simplement AJOUTER
+        // des TPE dessus (ex: caisse supplementaire), pas ouvrir une nouvelle
+        // boutique — aucune info d'adresse/nom a redemander.
+        utilisateur merchantUser = persistUser("commercant.existingpdv@test.lanacash.ma", RoleUser.COMMERCANT);
+        commercant commercant = new commercant();
+        commercant.setUtilisateur(merchantUser);
+        commercant = commercantRepository.save(commercant);
+
+        dossier_affiliation acceptedDossier = new dossier_affiliation();
+        acceptedDossier.setCommercant(commercant);
+        acceptedDossier.setStatus(StatusDossier.ACCEPTE);
+        acceptedDossier.setTypeAffiliation(TypeAffiliation.TPE);
+        acceptedDossier.setDateSoumission(LocalDate.now());
+        dossierAffiliationRepository.save(acceptedDossier);
+
+        pdv pointVenteExistant = new pdv();
+        pointVenteExistant.setNomPDV("Boutique existante");
+        pointVenteExistant.setCommercant(commercant);
+        pointVenteExistant.setStatut("ACTIF");
+        pointVenteExistant = pdvRepository.save(pointVenteExistant);
+        long nombrePdvAvant = pdvRepository.count();
+
+        var response = merchantWorkspaceManagementService.requestNewPdvProduct(
+            "Bearer " + tokenFor(merchantUser),
+            new MerchantPdvProductRequest(
+                null, null, null, null, null, null, null,
+                "TPE", "2", "STANDARD", "GPRS", "ACHAT", null, null, null, null,
+                null, null,
+                pointVenteExistant.getIdPDV()
+            )
+        );
+
+        assertThat(response.message()).isNotBlank();
+        // Aucun nouveau PDV cree : le compte doit rester identique.
+        assertThat(pdvRepository.count()).isEqualTo(nombrePdvAvant);
+
+        dossier_affiliation extensionDossier = dossierAffiliationRepository
+            .findAllByCommercant_IdCommercantOrderByDateSoumissionDescIdDossierDesc(commercant.getIdCommercant())
+            .stream()
+            .filter(d -> "NOUVEAU_PDV".equals(d.getOrigineCreation()))
+            .findFirst()
+            .orElseThrow();
+        assertThat(extensionDossier.getRequestedPdv().getIdPDV()).isEqualTo(pointVenteExistant.getIdPDV());
+        assertThat(extensionDossier.getRequestedPdvDejaExistant())
+            .as("Doit etre marque comme reutilisant un PDV existant, pour que l'UI n'affiche jamais \"Nouveau point de vente\"")
+            .isTrue();
+    }
+
+    @Test
+    void marksTheDossierAsNotUsingAnExistingPdvWhenANewOneIsCreated() {
+        utilisateur merchantUser = persistUser("commercant.newpdv.flag@test.lanacash.ma", RoleUser.COMMERCANT);
+        commercant commercant = new commercant();
+        commercant.setUtilisateur(merchantUser);
+        commercant = commercantRepository.save(commercant);
+
+        dossier_affiliation acceptedDossier = new dossier_affiliation();
+        acceptedDossier.setCommercant(commercant);
+        acceptedDossier.setStatus(StatusDossier.ACCEPTE);
+        acceptedDossier.setTypeAffiliation(TypeAffiliation.TPE);
+        acceptedDossier.setDateSoumission(LocalDate.now());
+        dossierAffiliationRepository.save(acceptedDossier);
+
+        merchantWorkspaceManagementService.requestNewPdvProduct(
+            "Bearer " + tokenFor(merchantUser),
+            new MerchantPdvProductRequest(
+                "Nouveau PDV Flag", "12 rue Test", "Casablanca", null, null, "0600000000", null,
+                "TPE", "1", "STANDARD", "GPRS", "ACHAT", null, null, null, null,
+                33.5731, -7.5898,
+                null
+            )
+        );
+
+        dossier_affiliation extensionDossier = dossierAffiliationRepository
+            .findAllByCommercant_IdCommercantOrderByDateSoumissionDescIdDossierDesc(commercant.getIdCommercant())
+            .stream()
+            .filter(d -> "NOUVEAU_PDV".equals(d.getOrigineCreation()))
+            .findFirst()
+            .orElseThrow();
+        assertThat(extensionDossier.getRequestedPdvDejaExistant()).isFalse();
+    }
+
+    @Test
+    void rejectsExistingPdvThatBelongsToAnotherCommercant() {
+        utilisateur merchantUser = persistUser("commercant.existingpdv.autre@test.lanacash.ma", RoleUser.COMMERCANT);
+        commercant commercant = new commercant();
+        commercant.setUtilisateur(merchantUser);
+        commercant = commercantRepository.save(commercant);
+
+        dossier_affiliation acceptedDossier = new dossier_affiliation();
+        acceptedDossier.setCommercant(commercant);
+        acceptedDossier.setStatus(StatusDossier.ACCEPTE);
+        acceptedDossier.setTypeAffiliation(TypeAffiliation.TPE);
+        acceptedDossier.setDateSoumission(LocalDate.now());
+        dossierAffiliationRepository.save(acceptedDossier);
+
+        utilisateur autreMerchantUser = persistUser("commercant.autre.pdv@test.lanacash.ma", RoleUser.COMMERCANT);
+        commercant autreCommercant = new commercant();
+        autreCommercant.setUtilisateur(autreMerchantUser);
+        autreCommercant = commercantRepository.save(autreCommercant);
+
+        pdv pointVenteAutrui = new pdv();
+        pointVenteAutrui.setNomPDV("Boutique d'un autre");
+        pointVenteAutrui.setCommercant(autreCommercant);
+        pointVenteAutrui.setStatut("ACTIF");
+        pointVenteAutrui = pdvRepository.save(pointVenteAutrui);
+        final Long idPdvAutrui = pointVenteAutrui.getIdPDV();
+
+        assertThatThrownBy(() ->
+            merchantWorkspaceManagementService.requestNewPdvProduct(
+                "Bearer " + tokenFor(merchantUser),
+                new MerchantPdvProductRequest(
+                    null, null, null, null, null, null, null,
+                    "TPE", "1", "STANDARD", "GPRS", "ACHAT", null, null, null, null,
+                    null, null,
+                    idPdvAutrui
+                )
+            )
+        ).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void allowsEcommerceExtensionRequestForTpeMerchant() {
+        // Un commercant deja affilie TPE doit pouvoir ajouter le canal
+        // e-commerce en extension — avant ce correctif, isCompatibleAugmentationType
+        // le refusait a tort (seul un commercant deja E_COMMERCE pouvait
+        // demander E_COMMERCE), ce qui empechait tout dossier "TPE + e-commerce"
+        // de se constituer via deux demandes distinctes.
+        utilisateur merchantUser = persistUser("commercant.newpdv.tpe-then-ecom@test.lanacash.ma", RoleUser.COMMERCANT);
+        commercant commercant = new commercant();
+        commercant.setUtilisateur(merchantUser);
+        commercant = commercantRepository.save(commercant);
+
+        dossier_affiliation acceptedDossier = new dossier_affiliation();
+        acceptedDossier.setCommercant(commercant);
+        acceptedDossier.setStatus(StatusDossier.ACCEPTE);
+        acceptedDossier.setTypeAffiliation(TypeAffiliation.TPE);
+        acceptedDossier.setDateSoumission(LocalDate.now());
+        dossierAffiliationRepository.save(acceptedDossier);
+
+        var response = merchantWorkspaceManagementService.requestNewPdvProduct(
+            "Bearer " + tokenFor(merchantUser),
+            new MerchantPdvProductRequest(
+                null, null, null, null, null, null, null,
+                "E_COMMERCE", null, null, null, null, null,
+                "INTEGRATION_API", "https://nouvelle-boutique.example.ma", null,
+                null, null,
+                null
+            )
+        );
+
+        assertThat(response.message()).isNotBlank();
+    }
+
+    @Test
+    void allowsQrCodeExtensionRequestForEcommerceMerchant() {
+        // Symetriquement, un commercant deja e-commerce doit pouvoir demander
+        // un canal physique (TPE/SoftPOS/QR Code) — QR_CODE etait meme absent
+        // de la liste des types autorises pour TOUT commercant avant ce
+        // correctif, quelle que soit son affiliation actuelle.
+        utilisateur merchantUser = persistUser("commercant.newpdv.ecom-then-qr@test.lanacash.ma", RoleUser.COMMERCANT);
+        commercant commercant = new commercant();
+        commercant.setUtilisateur(merchantUser);
+        commercant = commercantRepository.save(commercant);
+
+        dossier_affiliation acceptedDossier = new dossier_affiliation();
+        acceptedDossier.setCommercant(commercant);
+        acceptedDossier.setStatus(StatusDossier.ACCEPTE);
+        acceptedDossier.setTypeAffiliation(TypeAffiliation.E_COMMERCE);
+        acceptedDossier.setDateSoumission(LocalDate.now());
+        dossierAffiliationRepository.save(acceptedDossier);
+
+        var response = merchantWorkspaceManagementService.requestNewPdvProduct(
+            "Bearer " + tokenFor(merchantUser),
+            new MerchantPdvProductRequest(
+                "Nouveau PDV QR", "12 rue Test", "Casablanca", null, null, "0600000003", null,
+                "QR_CODE", "1", "STANDARD", "GPRS", "ACHAT", null, null, null, null,
+                33.5731, -7.5898,
+                null
+            )
+        );
+
+        assertThat(response.message()).isNotBlank();
+    }
+
+    @Test
+    void rejectsCombinedTypeAsExtensionRequest() {
+        // Seule restriction restante : on ajoute UN canal a la fois via une
+        // extension, jamais directement le type combine ENCAISSEMENT_ET_ECOMMERCE.
+        utilisateur merchantUser = persistUser("commercant.newpdv.combined-rejected@test.lanacash.ma", RoleUser.COMMERCANT);
         commercant commercant = new commercant();
         commercant.setUtilisateur(merchantUser);
         commercant = commercantRepository.save(commercant);
@@ -136,10 +326,11 @@ class MerchantWorkspaceCreationTest {
                 "Bearer " + tokenFor(merchantUser),
                 new MerchantPdvProductRequest(
                     null, null, null, null, null, null, null,
-                    "E_COMMERCE", null, null, null, null, null,
+                    "ENCAISSEMENT_ET_ECOMMERCE", null, null, null, null, null,
                     "INTEGRATION_API", "https://nouvelle-boutique.example.ma", null,
-                    null, null
-                )
+                    null, null,
+                null
+            )
             )
         ).isInstanceOf(IllegalArgumentException.class);
     }
@@ -157,8 +348,9 @@ class MerchantWorkspaceCreationTest {
                 new MerchantPdvProductRequest(
                     "Nouveau PDV", "12 rue Test", "Casablanca", null, null, "0600000000", null,
                     "TPE", "1", "STANDARD", "GPRS", "ACHAT", null, null, null, null,
-                    33.5731, -7.5898
-                )
+                    33.5731, -7.5898,
+                null
+            )
             )
         ).isInstanceOf(IllegalArgumentException.class);
     }

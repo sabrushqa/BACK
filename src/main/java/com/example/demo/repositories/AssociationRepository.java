@@ -6,4 +6,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface AssociationRepository extends JpaRepository<Association, Long> {
     Optional<Association> findByCommercant_IdCommercant(Long commercantId);
+    java.util.List<Association> findAllByCommercant_IdCommercantIn(java.util.List<Long> commercantIds);
+
 }

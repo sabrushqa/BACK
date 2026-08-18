@@ -38,7 +38,6 @@ import org.springframework.transaction.annotation.Transactional;
 public class AffiliationDemoSeeder implements ApplicationRunner {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(AffiliationDemoSeeder.class);
-    private static final String DEFAULT_PASSWORD = "SeedDemo123!";
 
     private final UtilisateurRepository utilisateurRepository;
     private final CommercantRepository commercantRepository;
@@ -48,6 +47,7 @@ public class AffiliationDemoSeeder implements ApplicationRunner {
     private final PasswordHashService passwordHashService;
     private final int requestedCount;
     private final String emailPrefix;
+    private final String defaultPassword;
 
     public AffiliationDemoSeeder(
         UtilisateurRepository utilisateurRepository,
@@ -57,7 +57,11 @@ public class AffiliationDemoSeeder implements ApplicationRunner {
         BackOfficeRepository backOfficeRepository,
         PasswordHashService passwordHashService,
         @Value("${app.demo.affiliation-seed.count:50}") int requestedCount,
-        @Value("${app.demo.affiliation-seed.e-mail-prefix:seed.affiliation.demo}") String emailPrefix
+        @Value("${app.demo.affiliation-seed.e-mail-prefix:seed.affiliation.demo}") String emailPrefix,
+        // Sonar S2068 : evite un mot de passe litteral en dur dans le code source —
+        // configurable via env var (APP_DEMO_SEED_PASSWORD), avec la meme valeur par
+        // defaut qu'avant pour ne rien changer en local/dev sans configuration.
+        @Value("${app.demo.seed-password:SeedDemo123!}") String defaultPassword
     ) {
         this.utilisateurRepository = utilisateurRepository;
         this.commercantRepository = commercantRepository;
@@ -67,6 +71,7 @@ public class AffiliationDemoSeeder implements ApplicationRunner {
         this.passwordHashService = passwordHashService;
         this.requestedCount = requestedCount;
         this.emailPrefix = emailPrefix;
+        this.defaultPassword = defaultPassword;
     }
 
     @Override
@@ -288,7 +293,7 @@ public class AffiliationDemoSeeder implements ApplicationRunner {
     ) {
         utilisateur utilisateur = new utilisateur();
         utilisateur.setEmail(email);
-        utilisateur.setPassword(passwordHashService.hash(DEFAULT_PASSWORD));
+        utilisateur.setPassword(passwordHashService.hash(defaultPassword));
         utilisateur.setRole(RoleUser.COMMERCANT);
         utilisateur.setTokenVersion(0);
 

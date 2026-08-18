@@ -1,5 +1,6 @@
 package com.example.demo.services;
 
+import com.example.demo.entities.back_office;
 import com.example.demo.entities.commercant;
 import com.example.demo.entities.commerciale;
 import com.example.demo.entities.dossier_affiliation;
@@ -150,6 +151,79 @@ public class SupervisorNotificationService {
     }
 
     /**
+     * Une demande d'extension (NOUVEAU_PDV) hérite déjà à la création du
+     * commercial et du BOA qui suivent ce commerçant (voir
+     * MerchantWorkspaceManagementService::requestNewPdvProduct — continuité
+     * d'affectation, pas de nouvelle assignation superviseur à faire). Sans
+     * cette notification, ni l'un ni l'autre n'apprenait qu'une nouvelle
+     * demande venait d'atterrir dans sa file — seule une recherche manuelle
+     * dans "Demande d'extension" la révélait. Le BOA reçoit ici un premier
+     * signal ; il sera notifié une seconde fois (DOSSIER_A_VALIDER_BOA) une
+     * fois le dossier complété par le commercial et prêt pour sa validation.
+     */
+    public void notifyNewExtensionRequest(
+        dossier_affiliation dossier,
+        commercant commercant,
+        commerciale commercialeAssignee,
+        back_office backOfficeAssigne
+    ) {
+        String merchantName = displayName(commercant);
+        String subject = "Nouvelle demande d'extension — " + merchantName;
+        String body =
+            """
+            Bonjour %s,
+
+            %s a soumis une nouvelle demande d'extension (PDV/TPE/canal e-commerce
+            supplémentaire).
+
+            Dossier : #%d
+
+            Connectez-vous au portail pour la consulter.
+
+            Cordialement,
+            L'équipe Lana Cash
+            """;
+
+        if (commercialeAssignee != null && commercialeAssignee.getUtilisateur() != null) {
+            utilisateur commercialUser = commercialeAssignee.getUtilisateur();
+            affiliationStatusMailService.sendStatusUpdateEmail(
+                commercialUser.getEmail(),
+                displayName(commercialeAssignee),
+                subject,
+                body.formatted(displayName(commercialeAssignee), merchantName, dossier.getIdDossier())
+            );
+            createNotification(
+                commercialUser,
+                dossier.getIdDossier(),
+                "Nouvelle demande d'extension de " + merchantName + ".",
+                TypeNotification.DOSSIER_ASSIGNE
+            );
+        }
+
+        if (backOfficeAssigne != null && backOfficeAssigne.getUtilisateur() != null) {
+            utilisateur backOfficeUser = backOfficeAssigne.getUtilisateur();
+            String backOfficeName = firstNotBlankName(backOfficeAssigne.getPrenom(), backOfficeAssigne.getNom());
+            affiliationStatusMailService.sendStatusUpdateEmail(
+                backOfficeUser.getEmail(),
+                backOfficeName,
+                subject,
+                body.formatted(backOfficeName, merchantName, dossier.getIdDossier())
+            );
+            createNotification(
+                backOfficeUser,
+                dossier.getIdDossier(),
+                "Nouvelle demande d'extension de " + merchantName + " reçue.",
+                TypeNotification.DOSSIER_A_VALIDER_BOA
+            );
+        }
+    }
+
+    private String firstNotBlankName(String prenom, String nom) {
+        String fullName = ((StringUtils.hasText(prenom) ? prenom + " " : "") + (nom == null ? "" : nom)).trim();
+        return StringUtils.hasText(fullName) ? fullName : "back office";
+    }
+
+    /**
      * Notifie le commerçant (in-app + e-mail) dès qu'un TPE lui a été
      * réellement affecté — c'est ce moment précis qui débloque son espace
      * (voir MerchantAccessService::workspaceUnlocked).
@@ -185,6 +259,46 @@ public class SupervisorNotificationService {
             dossier.getIdDossier(),
             "Un TPE a été affecté à votre dossier #" + dossier.getIdDossier() + " — votre espace est débloqué.",
             TypeNotification.TPE_AFFECTE
+        );
+    }
+
+    /**
+     * Equivalent de notifyTpeAssigned() pour le canal e-commerce : notifie le
+     * commerçant dès que son site est réellement interfacé avec Switch.
+     */
+    public void notifyEcommerceSiteAssigned(dossier_affiliation dossier, commercant commercant) {
+        if (commercant == null || commercant.getUtilisateur() == null) {
+            return;
+        }
+        utilisateur merchantUser = commercant.getUtilisateur();
+        String subject = "Votre site e-commerce a été interfacé";
+        String body =
+            """
+            Bonjour,
+
+            Votre site e-commerce vient d'être interfacé avec la plateforme de paiement
+            Lana Cash pour votre dossier #%d.
+            Votre espace commerçant Lana Cash est maintenant débloqué.
+
+            Connectez-vous au portail pour y accéder.
+
+            Cordialement,
+            L'équipe Lana Cash
+            """.formatted(dossier.getIdDossier());
+
+        affiliationStatusMailService.sendStatusUpdateEmail(
+            merchantUser.getEmail(),
+            displayName(commercant),
+            subject,
+            body
+        );
+
+        createNotification(
+            merchantUser,
+            dossier.getIdDossier(),
+            "Votre site e-commerce a été interfacé avec Switch pour le dossier #" + dossier.getIdDossier()
+                + " — votre espace est débloqué.",
+            TypeNotification.SITE_ECOMMERCE_AFFECTE
         );
     }
 

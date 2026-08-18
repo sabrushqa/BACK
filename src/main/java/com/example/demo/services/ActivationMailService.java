@@ -2,6 +2,7 @@ package com.example.demo.services;
 
 import com.example.demo.entities.commercant;
 import com.example.demo.entities.utilisateur;
+import com.example.demo.util.UrlUtils;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.format.DateTimeFormatter;
@@ -37,7 +38,7 @@ public class ActivationMailService {
         this.mailSenderProvider = mailSenderProvider;
         this.senderAddress = senderAddress;
         this.senderPassword = senderPassword;
-        this.frontendBaseUrl = stripTrailingSlash(frontendBaseUrl);
+        this.frontendBaseUrl = UrlUtils.stripTrailingSlash(frontendBaseUrl);
     }
 
     public MailDispatchResult sendActivationEmail(
@@ -151,9 +152,6 @@ public class ActivationMailService {
     public record MailDispatchResult(boolean sent, String message) {
     }
 
-    private String stripTrailingSlash(String value) {
-        return value == null ? "" : value.replaceAll("/+$", "");
-    }
 
     private String encode(String value) {
         return value == null ? "" : URLEncoder.encode(value, StandardCharsets.UTF_8);

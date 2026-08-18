@@ -2,7 +2,9 @@ package com.example.demo.services;
 
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.HexFormat;
@@ -14,6 +16,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpRequest;
 import org.springframework.http.client.ClientHttpRequestExecution;
 import org.springframework.http.client.ClientHttpResponse;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
@@ -47,8 +50,22 @@ public class SwitchMonetiqueClient {
     ) {
         this.internalToken = internalToken;
         this.signatureSecret = signatureSecret.getBytes(StandardCharsets.UTF_8);
+        // Sans timeouts explicites, un switch-monetique-service qui ne repond
+        // plus du tout (panne reseau silencieuse, pas juste "connexion
+        // refusee") laissait le thread appelant attendre indefiniment au lieu
+        // d'echouer vite — les caller *Safely() ne pouvaient alors jamais
+        // degrader gracieusement, ils restaient juste bloques avant meme
+        // d'atteindre leur try/catch. 3s connexion / 5s lecture : largement
+        // suffisant pour un appel local HMAC, assez court pour ne pas geler
+        // un dashboard en cas de panne.
+        HttpClient httpClient = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(3))
+            .build();
+        JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
+        requestFactory.setReadTimeout(Duration.ofSeconds(5));
         this.restClient = restClientBuilder
             .baseUrl(stripTrailingSlash(baseUrl))
+            .requestFactory(requestFactory)
             .requestInterceptor(this::signRequest)
             .build();
     }
@@ -85,6 +102,73 @@ public class SwitchMonetiqueClient {
         } catch (RestClientException exception) {
             throw new IllegalStateException(
                 "Le service switch-monetique est indisponible, impossible de consulter le stock de TPE.",
+                exception
+            );
+        }
+    }
+
+    public record SwitchTransaction(
+        String idTransaction,
+        String canal,
+        String idTpe,
+        String idSiteEcommerce,
+        String idCommercant,
+        BigDecimal montant,
+        String devise,
+        String typeTransaction,
+        String statut,
+        String mode,
+        LocalDateTime dateTransaction,
+        // Champs ISO8583 reels (DE11/DE37/DE38), deja persistes cote switch
+        // mais jamais exposes ici jusqu'ici — voir TransactionMonetique.java.
+        String stan,
+        String rrn,
+        String codeAutorisation,
+        // panMasque/typeCarte/aid : voir AuthorizationService::maskPan/
+        // detectTypeCarte/aidPour cote switch-monetique-service. Absent
+        // (null) pour toute transaction e-commerce (le PAN n'y transite pas
+        // par ce meme flux ISO8583) ou anterieure a ce champ.
+        String panMasque,
+        String typeCarte,
+        String aid
+    ) {
+    }
+
+    /**
+     * Historique des transactions d'un commerçant, tel que persisté par
+     * switch-monetique-service (base Oracle) — demo n'accède jamais directement
+     * à cette base, uniquement via TransactionApiController::parCommercant.
+     */
+    public List<SwitchTransaction> transactions(String idCommercant) {
+        try {
+            String uri = UriComponentsBuilder.fromPath("/api/switch/transactions")
+                .queryParam("commercantId", idCommercant)
+                .build()
+                .toUriString();
+            SwitchTransaction[] result = restClient.get().uri(uri).retrieve().body(SwitchTransaction[].class);
+            return result == null ? List.of() : List.of(result);
+        } catch (RestClientException exception) {
+            throw new IllegalStateException(
+                "Le service switch-monetique est indisponible, impossible de consulter les transactions.",
+                exception
+            );
+        }
+    }
+
+    /** Detail d'une transaction — utilise pour generer le ticket telechargeable. */
+    public java.util.Optional<SwitchTransaction> transaction(String idTransaction) {
+        try {
+            return java.util.Optional.ofNullable(
+                restClient.get()
+                    .uri("/api/switch/transactions/{id}", idTransaction)
+                    .retrieve()
+                    .body(SwitchTransaction.class)
+            );
+        } catch (org.springframework.web.client.HttpClientErrorException.NotFound notFound) {
+            return java.util.Optional.empty();
+        } catch (RestClientException exception) {
+            throw new IllegalStateException(
+                "Le service switch-monetique est indisponible, impossible de consulter la transaction.",
                 exception
             );
         }
@@ -161,6 +245,32 @@ public class SwitchMonetiqueClient {
     }
 
     private record UpdatePdvBody(String idPdv) {
+    }
+
+    public record SwitchSiteEcommerce(
+        String idSiteEcommerce,
+        String idCommercant,
+        String url,
+        boolean actif
+    ) {
+    }
+
+    /**
+     * Provisionne un NOUVEAU site e-commerce pour un commercant cote
+     * switch-monetique-service — equivalent, pour le canal e-commerce, de
+     * affecter() pour les TPE. Contrairement au TPE, il n'y a pas de stock
+     * pre-existant a choisir : l'identifiant est genere par switch (source de
+     * verite du canal) et retourne dans la reponse, demo ne l'invente jamais.
+     */
+    public SwitchSiteEcommerce provisionnerSiteEcommerce(String idCommercant, String url) {
+        return restClient.post()
+            .uri("/api/switch/ecommerce-sites")
+            .body(new EcommerceSiteAssignBody(idCommercant, url))
+            .retrieve()
+            .body(SwitchSiteEcommerce.class);
+    }
+
+    private record EcommerceSiteAssignBody(String idCommercant, String url) {
     }
 
     /**
