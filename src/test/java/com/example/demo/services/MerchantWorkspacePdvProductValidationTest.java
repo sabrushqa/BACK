@@ -136,7 +136,7 @@ class MerchantWorkspacePdvProductValidationTest {
             "Bearer " + expiredToken,
             new MerchantPdvProductRequest(
                 "Nouveau PDV", "12 rue Test", "Casablanca", null, null, "0600000000", null,
-                "TPE", "1", "STANDARD", "GPRS", "ACHAT", null, null, null, null,
+                "TPE", "1", "STANDARD", "GPRS", "ACHAT", null, null, null, null, null,
                 33.5731, -7.5898,
                 null
             )
@@ -159,7 +159,7 @@ class MerchantWorkspacePdvProductValidationTest {
             "Bearer " + token,
             new MerchantPdvProductRequest(
                 "Nouveau PDV", "12 rue Test", "Casablanca", null, null, "0600000000", null,
-                "TPE", "1", "STANDARD", "GPRS", "ACHAT", null, null, null, null,
+                "TPE", "1", "STANDARD", "GPRS", "ACHAT", null, null, null, null, null,
                 33.5731, -7.5898,
                 null
             )
@@ -177,7 +177,7 @@ class MerchantWorkspacePdvProductValidationTest {
             "Bearer " + tokenFor(supervisorUser),
             new MerchantPdvProductRequest(
                 "Nouveau PDV", "12 rue Test", "Casablanca", null, null, "0600000000", null,
-                "TPE", "1", "STANDARD", "GPRS", "ACHAT", null, null, null, null,
+                "TPE", "1", "STANDARD", "GPRS", "ACHAT", null, null, null, null, null,
                 33.5731, -7.5898,
                 null
             )
@@ -202,7 +202,7 @@ class MerchantWorkspacePdvProductValidationTest {
             "Bearer " + tokenFor(merchantUser),
             new MerchantPdvProductRequest(
                 "Nouveau PDV", "12 rue Test", "Casablanca", null, null, "0600000000", null,
-                "TPE", "1", "STANDARD", "GPRS", "ACHAT", null, null, null, null,
+                "TPE", "1", "STANDARD", "GPRS", "ACHAT", null, null, null, null, null,
                 33.5731, -7.5898,
                 null
             )
@@ -242,7 +242,7 @@ class MerchantWorkspacePdvProductValidationTest {
             "Bearer " + tokenFor(merchantUser),
             new MerchantPdvProductRequest(
                 null, null, null, null, null, null, null,
-                "E_COMMERCE", null, null, null, null, null,
+                "E_COMMERCE", null, null, null, null, null, null,
                 null, "https://nouvelle-boutique.example.ma", null,
                 null, null,
                 null
@@ -270,7 +270,7 @@ class MerchantWorkspacePdvProductValidationTest {
             "Bearer " + tokenFor(merchantUser),
             new MerchantPdvProductRequest(
                 null, null, null, null, null, null, null,
-                "E_COMMERCE", null, null, null, null, null,
+                "E_COMMERCE", null, null, null, null, null, null,
                 "INTEGRATION_API", null, null,
                 null, null,
                 null
@@ -288,7 +288,7 @@ class MerchantWorkspacePdvProductValidationTest {
             "Bearer " + tokenFor(commercant.getUtilisateur()),
             new MerchantPdvProductRequest(
                 null, null, null, null, null, null, null,
-                "TPE", "1", "STANDARD", "GPRS", "ACHAT", null, null, null, null,
+                "TPE", "1", "STANDARD", "GPRS", "ACHAT", null, null, null, null, null,
                 null, null,
                 null
             )
@@ -335,7 +335,7 @@ class MerchantWorkspacePdvProductValidationTest {
             "Bearer " + tokenFor(merchantUser),
             new MerchantPdvProductRequest(
                 "Nouveau PDV Autogeocode", "5 avenue Test", "Fes", null, null, "0600000000", null,
-                "TPE", "1", "STANDARD", "GPRS", "ACHAT", null, null, null, null,
+                "TPE", "1", "STANDARD", "GPRS", "ACHAT", null, null, null, null, null,
                 null, null,
                 null
             )
@@ -379,7 +379,7 @@ class MerchantWorkspacePdvProductValidationTest {
             "Bearer " + tokenFor(merchantUser),
             new MerchantPdvProductRequest(
                 "Nouveau PDV Notify", "8 rue Test", "Rabat", null, null, "0600000000", null,
-                "TPE", "1", "STANDARD", "GPRS", "ACHAT", null, null, null, null,
+                "TPE", "1", "STANDARD", "GPRS", "ACHAT", null, null, null, null, null,
                 33.5731, -7.5898,
                 null
             )

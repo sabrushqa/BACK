@@ -104,6 +104,14 @@ public class dossier_affiliation {
 
     private String modeleQrSoftpos;
 
+    // Quantite de dispositifs SoftPOS / codes QR demandes — pendant de
+    // nombreTpe pour ce canal (voir AffiliationRegistrationService,
+    // MerchantWorkspaceManagementService, StaffAffiliationManagementService).
+    // Un seul champ partage entre SoftPOS et QR Code, comme modeleQrSoftpos
+    // ci-dessus : ce canal ne suit pas de stock physique affecte (contrairement
+    // a nombreTpe / isTpeAlreadyFullyAssigned), donc purement informatif.
+    private Integer nombreQrSoftpos;
+
     private String commissionLocaleQrSoftpos;
 
     private String commissionEtrangereQrSoftpos;

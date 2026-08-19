@@ -14,6 +14,7 @@ public record MerchantPdvProductRequest(
     String connectiviteTpe,
     String modeMiseADispositionTpe,
     String modeleQrSoftpos,
+    String nombreQrSoftpos,
     String modeServiceEcommerce,
     String siteMarchandUrl,
     String applicationMobile,

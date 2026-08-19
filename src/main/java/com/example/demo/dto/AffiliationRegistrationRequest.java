@@ -55,6 +55,7 @@ public class AffiliationRegistrationRequest {
     private String commissionEtrangereEcommerce;
     private String fraisMiseEnServiceEcommerce;
     private String modeleQrSoftpos;
+    private String nombreQrSoftpos;
     private String commissionLocaleQrSoftpos;
     private String commissionEtrangereQrSoftpos;
     private String fraisServiceQrSoftpos;

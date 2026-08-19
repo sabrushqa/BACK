@@ -1195,6 +1195,7 @@ public class StaffAffiliationManagementService {
             safe(dossier.getSiteMarchandUrl()),
             safe(dossier.getApplicationMobile()),
             safe(dossier.getModeleQrSoftpos()),
+            dossier.getNombreQrSoftpos(),
             safe(dossier.getCommissionLocaleTpe()),
             safe(dossier.getCommissionEtrangereTpe()),
             safe(dossier.getDepotTpe()),
@@ -2396,6 +2397,9 @@ public class StaffAffiliationManagementService {
         dossier.setSiteMarchandUrl(normalize(request.getSiteMarchandUrl()));
         dossier.setApplicationMobile(normalize(request.getApplicationMobile()));
         dossier.setModeleQrSoftpos(normalize(request.getModeleQrSoftpos()));
+        dossier.setNombreQrSoftpos(
+            parseOptionalIntegerInRange(request.getNombreQrSoftpos(), "La quantité SoftPOS / QR Code", 1, MAX_TPE)
+        );
         dossier.setServiceCreditVoucher(Boolean.TRUE.equals(request.getServiceCreditVoucher()));
         dossier.setServiceAnnulation(Boolean.TRUE.equals(request.getServiceAnnulation()));
         dossier.setServiceDcc(Boolean.TRUE.equals(request.getServiceDcc()));

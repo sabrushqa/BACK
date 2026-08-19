@@ -211,11 +211,16 @@ public class AffiliationRegistrationService {
                     "L'URL du site marchand est obligatoire."
                 );
             }
-            case SOFTPOS, QR_CODE ->
+            case SOFTPOS, QR_CODE -> {
                 requireText(
                     request.getModeleQrSoftpos(),
                     "La configuration QR Code ou SoftPOS est obligatoire."
                 );
+                requireText(
+                    request.getNombreQrSoftpos(),
+                    "La quantité SoftPOS / QR Code est obligatoire."
+                );
+            }
             case ENCAISSEMENT_ET_ECOMMERCE -> {
                 requireText(
                     request.getModeServiceEcommerce(),
@@ -229,7 +234,8 @@ public class AffiliationRegistrationService {
                     && StringUtils.hasText(request.getEquipementTpe())
                     && StringUtils.hasText(request.getConnectiviteTpe())
                     && StringUtils.hasText(request.getNombreTpe());
-                boolean champsQrSoftposComplets = StringUtils.hasText(request.getModeleQrSoftpos());
+                boolean champsQrSoftposComplets = StringUtils.hasText(request.getModeleQrSoftpos())
+                    && StringUtils.hasText(request.getNombreQrSoftpos());
                 if (!champsTpeComplets && !champsQrSoftposComplets) {
                     throw new IllegalArgumentException(
                         "Les informations du produit d'encaissement (TPE, SoftPOS ou QR Code) sont obligatoires."
@@ -251,6 +257,9 @@ public class AffiliationRegistrationService {
         }
         if (StringUtils.hasText(request.getNombreTpe())) {
             validateIntegerRange(request.getNombreTpe(), "Le nombre de TPE", 1, MAX_TPE);
+        }
+        if (StringUtils.hasText(request.getNombreQrSoftpos())) {
+            validateIntegerRange(request.getNombreQrSoftpos(), "La quantité SoftPOS / QR Code", 1, MAX_TPE);
         }
     }
 
@@ -487,6 +496,9 @@ public class AffiliationRegistrationService {
             normalize(request.getFraisMiseEnServiceEcommerce())
         );
         dossier.setModeleQrSoftpos(normalize(request.getModeleQrSoftpos()));
+        dossier.setNombreQrSoftpos(
+            parseOptionalInteger(request.getNombreQrSoftpos(), "La quantité SoftPOS / QR Code")
+        );
         dossier.setCommissionLocaleQrSoftpos(normalize(request.getCommissionLocaleQrSoftpos()));
         dossier.setCommissionEtrangereQrSoftpos(
             normalize(request.getCommissionEtrangereQrSoftpos())

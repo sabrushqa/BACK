@@ -86,6 +86,7 @@ public record StaffAffiliationOverviewResponse(List<AffiliationRequestItem> requ
         String siteMarchandUrl,
         String applicationMobile,
         String modeleQrSoftpos,
+        Integer nombreQrSoftpos,
         String commissionLocaleTpe,
         String commissionEtrangereTpe,
         String depotTpe,

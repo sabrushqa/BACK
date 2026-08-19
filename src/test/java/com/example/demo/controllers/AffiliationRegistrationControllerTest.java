@@ -311,6 +311,7 @@ class AffiliationRegistrationControllerTest {
         form.add("prenom", "Omar");
         form.add("numeroAutoEntrepreneur", "AE-7788");
         form.add("modeleQrSoftpos", "QR_STATIQUE");
+        form.add("nombreQrSoftpos", "1");
         form.add("nombrePointsVente", "1");
         form.add(
             "pointVentesJson",
@@ -496,6 +497,7 @@ class AffiliationRegistrationControllerTest {
         form.add("prenom", "Salma");
         form.add("cin", "GH556677");
         form.add("modeleQrSoftpos", "STANDARD");
+        form.add("nombreQrSoftpos", "1");
         form.add("nombrePointsVente", "1");
         form.add(
             "pointVentesJson",
@@ -723,6 +725,7 @@ class AffiliationRegistrationControllerTest {
                 .param("prenom", "Omar")
                 .param("numeroAutoEntrepreneur", "AE-7788")
                 .param("modeleQrSoftpos", "QR_STATIQUE")
+                .param("nombreQrSoftpos", "1")
                 .param("nombrePointsVente", "1")
                 .param(
                     "pointVentesJson",

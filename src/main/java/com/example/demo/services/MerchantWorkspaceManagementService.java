@@ -333,6 +333,9 @@ public class MerchantWorkspaceManagementService {
         dossier.setEquipementTpe(normalize(request.equipementTpe()));
         dossier.setConnectiviteTpe(normalize(request.connectiviteTpe()));
         dossier.setModeleQrSoftpos(normalize(request.modeleQrSoftpos()));
+        dossier.setNombreQrSoftpos(
+            parseOptionalIntegerInRange(request.nombreQrSoftpos(), "La quantité SoftPOS / QR Code", 1, MAX_TPE)
+        );
         dossier.setModeServiceEcommerce(normalize(request.modeServiceEcommerce()));
         dossier.setSiteMarchandUrl(normalize(request.siteMarchandUrl()));
         dossier.setApplicationMobile(normalize(request.applicationMobile()));

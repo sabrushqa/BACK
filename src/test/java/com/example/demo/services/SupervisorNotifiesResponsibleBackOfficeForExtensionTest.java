@@ -108,7 +108,7 @@ class SupervisorNotifiesResponsibleBackOfficeForExtensionTest {
             "Bearer " + tokenFor(merchantUser),
             new MerchantPdvProductRequest(
                 null, null, null, null, null, null, null,
-                "E_COMMERCE", null, null, null, null, null,
+                "E_COMMERCE", null, null, null, null, null, null,
                 "INTEGRATION_API", "https://boutique-soraya.example.ma", null,
                 null, null,
                 null

@@ -134,7 +134,7 @@ class SupervisorFullExtensionLifecycleTest {
             "Bearer " + tokenFor(merchantUser),
             new MerchantPdvProductRequest(
                 "PDV Soraya 2", "10 rue Extension", "Fes", null, null, "0600000010", null,
-                "TPE", "1", "STANDARD", "GPRS", "ACHAT", null, null, null, null,
+                "TPE", "1", "STANDARD", "GPRS", "ACHAT", null, null, null, null, null,
                 34.0331, -5.0003,
                 null
             )
@@ -308,7 +308,7 @@ class SupervisorFullExtensionLifecycleTest {
             "Bearer " + tokenFor(merchantUser),
             new MerchantPdvProductRequest(
                 "PDV Soraya 2", "10 rue Extension", "Fes", null, null, "0600000011", null,
-                "TPE", "1", "STANDARD", "GPRS", "ACHAT", null, null, null, null,
+                "TPE", "1", "STANDARD", "GPRS", "ACHAT", null, null, null, null, null,
                 34.0331, -5.0003,
                 null
             )

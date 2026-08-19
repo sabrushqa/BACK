@@ -93,7 +93,7 @@ class SupervisorAssignEcommerceSiteToExtensionTest {
             "Bearer " + tokenFor(merchantUser),
             new MerchantPdvProductRequest(
                 null, null, null, null, null, null, null,
-                "E_COMMERCE", null, null, null, null, null,
+                "E_COMMERCE", null, null, null, null, null, null,
                 "INTEGRATION_API", "https://nouvelle-boutique.example.ma", null,
                 null, null,
                 null

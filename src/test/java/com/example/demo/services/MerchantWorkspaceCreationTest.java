@@ -82,7 +82,7 @@ class MerchantWorkspaceCreationTest {
             "Bearer " + tokenFor(merchantUser),
             new MerchantPdvProductRequest(
                 "Nouveau PDV", "12 rue Test", "Casablanca", null, null, "0600000000", null,
-                "TPE", "1", "STANDARD", "GPRS", "ACHAT", null, null, null, null,
+                "TPE", "1", "STANDARD", "GPRS", "ACHAT", null, null, null, null, null,
                 33.5731, -7.5898,
                 null
             )
@@ -109,7 +109,7 @@ class MerchantWorkspaceCreationTest {
             "Bearer " + tokenFor(merchantUser),
             new MerchantPdvProductRequest(
                 null, null, null, null, null, null, null,
-                "E_COMMERCE", null, null, null, null, null,
+                "E_COMMERCE", null, null, null, null, null, null,
                 "INTEGRATION_API", "https://nouvelle-boutique.example.ma", null,
                 null, null,
                 null
@@ -147,7 +147,7 @@ class MerchantWorkspaceCreationTest {
             "Bearer " + tokenFor(merchantUser),
             new MerchantPdvProductRequest(
                 null, null, null, null, null, null, null,
-                "TPE", "2", "STANDARD", "GPRS", "ACHAT", null, null, null, null,
+                "TPE", "2", "STANDARD", "GPRS", "ACHAT", null, null, null, null, null,
                 null, null,
                 pointVenteExistant.getIdPDV()
             )
@@ -187,7 +187,7 @@ class MerchantWorkspaceCreationTest {
             "Bearer " + tokenFor(merchantUser),
             new MerchantPdvProductRequest(
                 "Nouveau PDV Flag", "12 rue Test", "Casablanca", null, null, "0600000000", null,
-                "TPE", "1", "STANDARD", "GPRS", "ACHAT", null, null, null, null,
+                "TPE", "1", "STANDARD", "GPRS", "ACHAT", null, null, null, null, null,
                 33.5731, -7.5898,
                 null
             )
@@ -233,7 +233,7 @@ class MerchantWorkspaceCreationTest {
                 "Bearer " + tokenFor(merchantUser),
                 new MerchantPdvProductRequest(
                     null, null, null, null, null, null, null,
-                    "TPE", "1", "STANDARD", "GPRS", "ACHAT", null, null, null, null,
+                    "TPE", "1", "STANDARD", "GPRS", "ACHAT", null, null, null, null, null,
                     null, null,
                     idPdvAutrui
                 )
@@ -264,7 +264,7 @@ class MerchantWorkspaceCreationTest {
             "Bearer " + tokenFor(merchantUser),
             new MerchantPdvProductRequest(
                 null, null, null, null, null, null, null,
-                "E_COMMERCE", null, null, null, null, null,
+                "E_COMMERCE", null, null, null, null, null, null,
                 "INTEGRATION_API", "https://nouvelle-boutique.example.ma", null,
                 null, null,
                 null
@@ -296,7 +296,7 @@ class MerchantWorkspaceCreationTest {
             "Bearer " + tokenFor(merchantUser),
             new MerchantPdvProductRequest(
                 "Nouveau PDV QR", "12 rue Test", "Casablanca", null, null, "0600000003", null,
-                "QR_CODE", "1", "STANDARD", "GPRS", "ACHAT", null, null, null, null,
+                "QR_CODE", "1", "STANDARD", "GPRS", "ACHAT", null, null, null, null, null,
                 33.5731, -7.5898,
                 null
             )
@@ -326,7 +326,7 @@ class MerchantWorkspaceCreationTest {
                 "Bearer " + tokenFor(merchantUser),
                 new MerchantPdvProductRequest(
                     null, null, null, null, null, null, null,
-                    "ENCAISSEMENT_ET_ECOMMERCE", null, null, null, null, null,
+                    "ENCAISSEMENT_ET_ECOMMERCE", null, null, null, null, null, null,
                     "INTEGRATION_API", "https://nouvelle-boutique.example.ma", null,
                     null, null,
                 null
@@ -347,7 +347,7 @@ class MerchantWorkspaceCreationTest {
                 "Bearer " + tokenFor(merchantUser),
                 new MerchantPdvProductRequest(
                     "Nouveau PDV", "12 rue Test", "Casablanca", null, null, "0600000000", null,
-                    "TPE", "1", "STANDARD", "GPRS", "ACHAT", null, null, null, null,
+                    "TPE", "1", "STANDARD", "GPRS", "ACHAT", null, null, null, null, null,
                     33.5731, -7.5898,
                 null
             )

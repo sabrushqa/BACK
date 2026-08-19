@@ -115,7 +115,7 @@ class SupervisorAssignTpeToExtensionPdvTest {
             "Bearer " + tokenFor(merchantUser),
             new MerchantPdvProductRequest(
                 "Nouvelle boutique", "45 avenue Test", "Rabat", null, null, "0600000001", null,
-                "TPE", "1", "STANDARD", "GPRS", "ACHAT", null, null, null, null,
+                "TPE", "1", "STANDARD", "GPRS", "ACHAT", null, null, null, null, null,
                 34.0209, -6.8416,
                 null
             )

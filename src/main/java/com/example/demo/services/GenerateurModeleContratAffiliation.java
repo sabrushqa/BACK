@@ -110,6 +110,7 @@ public class GenerateurModeleContratAffiliation {
         appendFicheRowIfPresent(product, "Mode mise à disposition", dossier.getModeMiseADispositionTpe());
         appendFicheRowIfPresent(product, "Site marchand", dossier.getSiteMarchandUrl());
         appendFicheRowIfPresent(product, "Modèle QR / SoftPOS", dossier.getModeleQrSoftpos());
+        appendFicheRowIfPresent(product, "Quantité SoftPOS / QR Code", safe(dossier.getNombreQrSoftpos()));
 
         StringBuilder reportAndContract = new StringBuilder();
         appendFicheRowIfPresent(reportAndContract, "Qualification", dossier.getCompteRenduQualification());
@@ -695,6 +696,7 @@ public class GenerateurModeleContratAffiliation {
             safe(dossier.getPrixAchatTpe()),
             safe(dossier.getPrixLicenceTpe()),
             safe(dossier.getModeleQrSoftpos()),
+            dossier.getNombreQrSoftpos() == null ? "" : String.valueOf(dossier.getNombreQrSoftpos()),
             safe(dossier.getCommissionLocaleQrSoftpos()),
             safe(dossier.getCommissionEtrangereQrSoftpos()),
             safe(dossier.getFraisServiceQrSoftpos()),
@@ -893,7 +895,11 @@ public class GenerateurModeleContratAffiliation {
         html = replaceTemplateToken(html, "modeMiseADispositionTpe", templateValue(data.modeMiseADispositionTpe()));
         html = replaceTemplateToken(html, "equipementTpe", templateValue(data.equipementTpe()));
         html = replaceTemplateToken(html, "connectiviteTpe", templateValue(data.connectiviteTpe()));
-        html = replaceTemplateToken(html, "nombreTpe", templateValue(data.nombreTpe()));
+        // Un seul champ "Nombre :" dans le gabarit (equip-box), partage entre
+        // TPE/SoftPOS/QR Code (les cases typeTpeCheck/typeSoftposCheck/
+        // typeQrCheck ci-dessus indiquent le canal coche) — on y affiche la
+        // quantite du canal effectivement renseigne.
+        html = replaceTemplateToken(html, "nombreTpe", templateValue(firstNotBlank(data.nombreTpe(), data.nombreQrSoftpos())));
         html = replaceTemplateToken(html, "modeleQrSoftpos", templateValue(data.modeleQrSoftpos()));
         html = replaceTemplateToken(html, "commissionLocale", templateValue(commissionLocale));
         html = replaceTemplateToken(html, "commissionEtrangere", templateValue(commissionEtrangere));
@@ -1438,6 +1444,7 @@ public class GenerateurModeleContratAffiliation {
         String prixAchatTpe,
         String prixLicenceTpe,
         String modeleQrSoftpos,
+        String nombreQrSoftpos,
         String commissionLocaleQrSoftpos,
         String commissionEtrangereQrSoftpos,
         String fraisServiceQrSoftpos,
