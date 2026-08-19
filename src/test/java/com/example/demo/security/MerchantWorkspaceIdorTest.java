@@ -1,6 +1,7 @@
 package com.example.demo.security;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.when;
 
 import com.example.demo.dto.MerchantTpePdvAssignmentRequest;
 import com.example.demo.entities.commercant;
@@ -15,12 +16,15 @@ import com.example.demo.repositories.SousCommercantRepository;
 import com.example.demo.repositories.TpeRepository;
 import com.example.demo.repositories.UtilisateurRepository;
 import com.example.demo.services.MerchantWorkspaceManagementService;
+import com.example.demo.services.SwitchMonetiqueClient;
 import java.time.LocalDate;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -50,6 +54,18 @@ class MerchantWorkspaceIdorTest {
 
     @Autowired
     private SousCommercantRepository sousCommercantRepository;
+
+    // tpeB est un TPE local (table tpe, id numerique), donc jamais trouve
+    // par MerchantWorkspaceManagementService.assignTpeToPdv en tant que TPE
+    // Oracle : le code retombe quand meme sur switchMonetiqueClient.parId en
+    // fallback (voir son commentaire "on essaie d'abord le local... sinon on
+    // bascule sur Oracle"). Sans ce mock, le test appelait un vrai
+    // switch-monetique sur localhost:8090 — absent en CI, ce qui faisait
+    // echouer le test avec IllegalStateException au lieu de verifier le
+    // vrai comportement de securite attendu (IllegalArgumentException).
+    // Meme pattern que MerchantOracleTpeVisibilityAndReassignTest.
+    @MockitoBean
+    private SwitchMonetiqueClient switchMonetiqueClient;
 
     private utilisateur commercantAUser;
     private utilisateur commercantBUser;
@@ -104,6 +120,8 @@ class MerchantWorkspaceIdorTest {
 
     @Test
     void cannotAssignAnotherMerchantsTpeToOwnPdv() {
+        when(switchMonetiqueClient.parId(String.valueOf(tpeB.getIdTPE()))).thenReturn(Optional.empty());
+
         assertThatThrownBy(() ->
             merchantWorkspaceManagementService.assignTpeToPdv(
                 "Bearer " + tokenFor(commercantAUser),
