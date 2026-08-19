@@ -1178,10 +1178,28 @@ public class SupervisorManagementService {
 
         int requestedCount = resolveRequestedTpeCount(dossier);
         String commercantId = commercant.getIdCommercant().toString();
-        long assignedCount = switchMonetiqueClient.stockComplet()
-            .stream()
-            .filter(candidate -> commercantId.equals(candidate.idCommercant()))
-            .count();
+        // Une demande d'extension (NOUVEAU_PDV) vise un point de vente precis
+        // (requestedPdv) : seul ce PDV doit compter, pas le total du
+        // commercant — sinon un commercant deja titulaire d'un TPE sur son
+        // PREMIER point de vente se voit refuser l'affectation sur une
+        // NOUVELLE extension alors qu'aucun TPE n'a encore ete affecte sur le
+        // PDV vise par celle-ci. Meme correctif que
+        // StaffAffiliationManagementService::isTpeAlreadyFullyAssigned (bug
+        // reel constate manuellement sur le meme scenario, compte "soraya").
+        pdv requestedPdv = dossier.getRequestedPdv();
+        long assignedCount;
+        if (requestedPdv != null && requestedPdv.getIdPDV() != null) {
+            String requestedPdvId = requestedPdv.getIdPDV().toString();
+            assignedCount = switchMonetiqueClient.stockComplet()
+                .stream()
+                .filter(candidate -> requestedPdvId.equals(candidate.idPdv()))
+                .count();
+        } else {
+            assignedCount = switchMonetiqueClient.stockComplet()
+                .stream()
+                .filter(candidate -> commercantId.equals(candidate.idCommercant()))
+                .count();
+        }
         if (assignedCount >= requestedCount) {
             throw new IllegalArgumentException(
                 "Le nombre de références affectées au commerçant atteint déjà le nombre demandé dans le dossier ("

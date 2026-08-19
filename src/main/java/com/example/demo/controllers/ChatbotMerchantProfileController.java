@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -49,7 +50,12 @@ public class ChatbotMerchantProfileController {
     @GetMapping("/{merchantId}/profile")
     public ResponseEntity<?> profile(
         @RequestHeader(value = "X-Internal-Token", required = false) String token,
-        @PathVariable String merchantId
+        @PathVariable String merchantId,
+        // Present uniquement quand l'appelant reel est un sous-commerçant
+        // (voir ChatbotProxyController::resolveMerchantPdvId) : restreint le
+        // profil renvoye au seul PDV de ce sous-commerçant, plutot qu'a tout
+        // le commerçant parent designe par merchantId.
+        @RequestParam(value = "pdvId", required = false) Long pdvId
     ) {
         if (token == null || !isTokenValid(token)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
@@ -63,7 +69,7 @@ public class ChatbotMerchantProfileController {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("merchantId invalide");
         }
 
-        ChatbotMerchantProfileResponse profile = merchantAccessService.getMerchantProfileForChatbot(commercantId);
+        ChatbotMerchantProfileResponse profile = merchantAccessService.getMerchantProfileForChatbot(commercantId, pdvId);
         if (profile == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Commerçant introuvable");
         }

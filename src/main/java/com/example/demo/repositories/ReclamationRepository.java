@@ -19,6 +19,12 @@ public interface ReclamationRepository extends JpaRepository<Reclamation, Long> 
 
     List<Reclamation> findByCommercant_IdCommercantOrderByDateCreationDesc(Long commercantId);
 
+    // Un sous-commerçant ne doit voir que les réclamations liées à un TPE de
+    // SON PDV, pas tout l'historique du commerçant parent (même principe que
+    // TpeRepository::findBySubMerchantUserIdOrderByIdDesc / TransactionsRepository
+    // ::findTop8ByTpe_Pdv_SousCommercant_Utilisateur_Id...).
+    List<Reclamation> findByTpe_Pdv_SousCommercant_Utilisateur_IdOrderByDateCreationDesc(Long utilisateurId);
+
     long countByCommercant_IdCommercant(Long commercantId);
 
     long countByCommercant_IdCommercantAndStatut(Long commercantId, String statut);

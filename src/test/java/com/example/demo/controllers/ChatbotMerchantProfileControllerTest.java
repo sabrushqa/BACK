@@ -30,7 +30,7 @@ class ChatbotMerchantProfileControllerTest {
     void rejectsRequestWithMissingToken() {
         ChatbotMerchantProfileController controller = buildController(mock(MerchantAccessService.class));
 
-        var response = controller.profile(null, "42");
+        var response = controller.profile(null, "42", null);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }
@@ -39,7 +39,7 @@ class ChatbotMerchantProfileControllerTest {
     void rejectsRequestWithWrongToken() {
         ChatbotMerchantProfileController controller = buildController(mock(MerchantAccessService.class));
 
-        var response = controller.profile("wrong-token", "42");
+        var response = controller.profile("wrong-token", "42", null);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }
@@ -48,7 +48,7 @@ class ChatbotMerchantProfileControllerTest {
     void rejectsNonNumericMerchantId() {
         ChatbotMerchantProfileController controller = buildController(mock(MerchantAccessService.class));
 
-        var response = controller.profile("expected-internal-token", "not-a-number");
+        var response = controller.profile("expected-internal-token", "not-a-number", null);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     }
@@ -56,10 +56,10 @@ class ChatbotMerchantProfileControllerTest {
     @Test
     void returnsNotFoundWhenMerchantUnknown() {
         MerchantAccessService merchantAccessService = mock(MerchantAccessService.class);
-        when(merchantAccessService.getMerchantProfileForChatbot(999L)).thenReturn(null);
+        when(merchantAccessService.getMerchantProfileForChatbot(999L, null)).thenReturn(null);
         ChatbotMerchantProfileController controller = buildController(merchantAccessService);
 
-        var response = controller.profile("expected-internal-token", "999");
+        var response = controller.profile("expected-internal-token", "999", null);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
@@ -72,10 +72,27 @@ class ChatbotMerchantProfileControllerTest {
             List.of(new ChatbotMerchantProfileResponse.PdvItem(1L, "PDV Test", "Casablanca", "12 rue Test")),
             List.of(new ChatbotMerchantProfileResponse.TpeItem("TPE-000001", "Ingenico", 1L, "PDV Test"))
         );
-        when(merchantAccessService.getMerchantProfileForChatbot(42L)).thenReturn(profile);
+        when(merchantAccessService.getMerchantProfileForChatbot(42L, null)).thenReturn(profile);
         ChatbotMerchantProfileController controller = buildController(merchantAccessService);
 
-        var response = controller.profile("expected-internal-token", "42");
+        var response = controller.profile("expected-internal-token", "42", null);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isEqualTo(profile);
+    }
+
+    @Test
+    void scopesProfileToPdvIdWhenProvided() {
+        MerchantAccessService merchantAccessService = mock(MerchantAccessService.class);
+        ChatbotMerchantProfileResponse profile = new ChatbotMerchantProfileResponse(
+            42L, "TPE", true, false,
+            List.of(new ChatbotMerchantProfileResponse.PdvItem(7L, "PDV du sous-commerçant", "Rabat", "3 rue Test")),
+            List.of(new ChatbotMerchantProfileResponse.TpeItem("TPE-000002", "Ingenico", 7L, "PDV du sous-commerçant"))
+        );
+        when(merchantAccessService.getMerchantProfileForChatbot(42L, 7L)).thenReturn(profile);
+        ChatbotMerchantProfileController controller = buildController(merchantAccessService);
+
+        var response = controller.profile("expected-internal-token", "42", 7L);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isEqualTo(profile);

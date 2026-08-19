@@ -287,9 +287,10 @@ public class GenerateurModeleContratAffiliation {
 
     public String genererHtmlContrat(dossier_affiliation dossier, pdv pointVente) {
         DonneesModeleContrat data = construireDonneesModele(dossier, pointVente);
-        return dossier.getTypeAffiliation() == TypeAffiliation.E_COMMERCE
+        String html = dossier.getTypeAffiliation() == TypeAffiliation.E_COMMERCE
             ? genererHtmlContratEcommerce(data)
             : genererHtmlContratEncaissement(data);
+        return appliquerBandeauExtensionSiBesoin(html, dossier, pointVente);
     }
 
     /**
@@ -298,7 +299,44 @@ public class GenerateurModeleContratAffiliation {
      * contrat encaissement est deja rendu via genererHtmlContrat(dossier, pdv).
      */
     public String genererHtmlContratEcommerceForce(dossier_affiliation dossier) {
-        return genererHtmlContratEcommerce(construireDonneesModele(dossier, null));
+        String html = genererHtmlContratEcommerce(construireDonneesModele(dossier, null));
+        return appliquerBandeauExtensionSiBesoin(html, dossier, null);
+    }
+
+    /**
+     * Une extension sur un PDV DEJA EXISTANT (voir dossier_affiliation::
+     * requestedPdvDejaExistant) genere un contrat structurellement identique
+     * au contrat normal (memes clauses, meme mise en page — pas de raison de
+     * les changer, c'est le meme point de vente) : seule differance
+     * necessaire, un bandeau qui rend explicite que ce document concerne une
+     * extension de canal (TPE/SoftPOS/QR/e-commerce) sur un point de vente
+     * deja affilie, plutot que de ressembler a un contrat d'affiliation
+     * initial. Une extension sur un NOUVEAU PDV n'a pas besoin de ce bandeau
+     * — le contrat est deja, de fait, celui d'un point de vente inedit.
+     */
+    private String appliquerBandeauExtensionSiBesoin(String html, dossier_affiliation dossier, pdv pointVente) {
+        if (!"NOUVEAU_PDV".equalsIgnoreCase(nullToEmptyLocal(dossier.getOrigineCreation()))
+            || !Boolean.TRUE.equals(dossier.getRequestedPdvDejaExistant())) {
+            return html;
+        }
+
+        String nomPdv = firstNotBlank(
+            field(pointVente == null ? null : pointVente.getNomPDV()),
+            field(dossier.getRequestedPdv() == null ? null : dossier.getRequestedPdv().getNomPDV()),
+            "—"
+        );
+        String bandeau = "<div style=\"background:#fff3cd;border:1px solid #d4a72c;color:#664d03;"
+            + "padding:6px 10px;margin-bottom:6px;font-family:Arial,Helvetica,sans-serif;"
+            + "font-size:8pt;font-weight:700;text-align:center;\">"
+            + "Demande d'extension — " + escapeHtml(mapAffiliationTypeLabel(dossier.getTypeAffiliation()))
+            + " — Point de vente : " + escapeHtml(nomPdv)
+            + "</div>";
+
+        return html.replaceFirst("(?i)<body\\s*>", "<body>" + bandeau);
+    }
+
+    private String nullToEmptyLocal(String value) {
+        return value == null ? "" : value.trim();
     }
 
     public String genererHtmlCompteRenduCommercial(dossier_affiliation dossier) {

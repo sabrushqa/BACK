@@ -77,7 +77,11 @@ public class ChatbotProxyController {
         @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader,
         @RequestBody String rawJsonBody
     ) {
-        String body = injectMerchantIdIntoJson(rawJsonBody, resolveMerchantId(authorizationHeader));
+        String body = injectMerchantIdIntoJson(
+            rawJsonBody,
+            resolveMerchantId(authorizationHeader),
+            resolveMerchantPdvId(authorizationHeader)
+        );
         return forward(
             restClient.post()
                 .uri("/chat/message")
@@ -94,6 +98,10 @@ public class ChatbotProxyController {
         String merchantId = resolveMerchantId(authorizationHeader);
         if (merchantId != null) {
             queryParams.set("merchant_id", merchantId);
+        }
+        String merchantPdvId = resolveMerchantPdvId(authorizationHeader);
+        if (merchantPdvId != null) {
+            queryParams.set("merchant_pdv_id", merchantPdvId);
         }
         return forward(
             restClient.post()
@@ -120,6 +128,10 @@ public class ChatbotProxyController {
         if (merchantId != null) {
             form.add("merchant_id", merchantId);
         }
+        String merchantPdvId = resolveMerchantPdvId(authorizationHeader);
+        if (merchantPdvId != null) {
+            form.add("merchant_pdv_id", merchantPdvId);
+        }
         return forward(
             restClient.post()
                 .uri("/chat/message-with-image")
@@ -142,6 +154,10 @@ public class ChatbotProxyController {
         String merchantId = resolveMerchantId(authorizationHeader);
         if (merchantId != null) {
             form.add("merchant_id", merchantId);
+        }
+        String merchantPdvId = resolveMerchantPdvId(authorizationHeader);
+        if (merchantPdvId != null) {
+            form.add("merchant_pdv_id", merchantPdvId);
         }
         return forward(
             restClient.post()
@@ -168,8 +184,31 @@ public class ChatbotProxyController {
         }
     }
 
-    private String injectMerchantIdIntoJson(String rawJsonBody, String merchantId) {
-        if (merchantId == null) {
+    /**
+     * Non-null uniquement quand l'appelant authentifie est un sous-commerçant
+     * (voir MerchantAccessService::resolveAuthenticatedPdvIdForSousCommercant) :
+     * transmis au chatbot en plus de merchant_id (toujours celui du commerçant
+     * PARENT, inchange) pour que le profil recupere cote Spring
+     * (ChatbotMerchantProfileController, appele par
+     * agent/tools/merchant_profile_tool.py) se limite au PDV du
+     * sous-commerçant — sans ca, le chatbot voyait tous les PDV/TPE du
+     * commerçant parent pour un sous-commerçant, contrairement a son propre
+     * dashboard (deja correctement scope par PDV).
+     */
+    private String resolveMerchantPdvId(String authorizationHeader) {
+        if (authorizationHeader == null || authorizationHeader.isBlank()) {
+            return null;
+        }
+        try {
+            Long pdvId = merchantAccessService.resolveAuthenticatedPdvIdForSousCommercant(authorizationHeader);
+            return pdvId != null ? pdvId.toString() : null;
+        } catch (Exception exception) {
+            return null;
+        }
+    }
+
+    private String injectMerchantIdIntoJson(String rawJsonBody, String merchantId, String merchantPdvId) {
+        if (merchantId == null && merchantPdvId == null) {
             return rawJsonBody;
         }
         try {
@@ -177,7 +216,12 @@ public class ChatbotProxyController {
             if (!(node instanceof ObjectNode objectNode)) {
                 return rawJsonBody;
             }
-            objectNode.put("merchant_id", merchantId);
+            if (merchantId != null) {
+                objectNode.put("merchant_id", merchantId);
+            }
+            if (merchantPdvId != null) {
+                objectNode.put("merchant_pdv_id", merchantPdvId);
+            }
             return objectMapper.writeValueAsString(objectNode);
         } catch (Exception exception) {
             // Corps illisible : on laisse passer tel quel, le chatbot renverra

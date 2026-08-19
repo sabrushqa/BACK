@@ -148,7 +148,7 @@ class ChatbotMerchantProfileServiceTest {
             )
         ));
 
-        ChatbotMerchantProfileResponse profile = merchantAccessService.getMerchantProfileForChatbot(commercantId);
+        ChatbotMerchantProfileResponse profile = merchantAccessService.getMerchantProfileForChatbot(commercantId, null);
 
         assertThat(profile).isNotNull();
         assertThat(profile.typeAffiliation()).isEqualTo("TPE");
@@ -178,7 +178,7 @@ class ChatbotMerchantProfileServiceTest {
         when(switchMonetiqueClient.stockComplet()).thenReturn(List.of());
 
         ChatbotMerchantProfileResponse profile =
-            merchantAccessService.getMerchantProfileForChatbot(commercant.getIdCommercant());
+            merchantAccessService.getMerchantProfileForChatbot(commercant.getIdCommercant(), null);
 
         assertThat(profile).isNotNull();
         assertThat(profile.typeAffiliation()).isEqualTo("E_COMMERCE");
@@ -205,7 +205,7 @@ class ChatbotMerchantProfileServiceTest {
         when(switchMonetiqueClient.stockComplet()).thenReturn(List.of());
 
         ChatbotMerchantProfileResponse profile =
-            merchantAccessService.getMerchantProfileForChatbot(commercant.getIdCommercant());
+            merchantAccessService.getMerchantProfileForChatbot(commercant.getIdCommercant(), null);
 
         assertThat(profile.supportsTpe()).isTrue();
         assertThat(profile.supportsEcommerce()).isTrue();
@@ -213,6 +213,100 @@ class ChatbotMerchantProfileServiceTest {
 
     @Test
     void profileReturnsNullForUnknownMerchant() {
-        assertThat(merchantAccessService.getMerchantProfileForChatbot(987654321L)).isNull();
+        assertThat(merchantAccessService.getMerchantProfileForChatbot(987654321L, null)).isNull();
+    }
+
+    @Test
+    void resolveAuthenticatedPdvIdForSousCommercantReturnsNullForRegularCommercant() {
+        utilisateur user = persistMerchantUser("profile.pdv-scope.regular@test.lanacash.ma");
+        commercant commercant = new commercant();
+        commercant.setUtilisateur(user);
+        commercantRepository.save(commercant);
+
+        assertThat(merchantAccessService.resolveAuthenticatedPdvIdForSousCommercant("Bearer " + tokenFor(user)))
+            .isNull();
+    }
+
+    @Test
+    void resolveAuthenticatedPdvIdForSousCommercantReturnsAssignedPdv() {
+        utilisateur parentUser = persistMerchantUser("profile.pdv-scope.parent@test.lanacash.ma");
+        commercant parentCommercant = new commercant();
+        parentCommercant.setUtilisateur(parentUser);
+        parentCommercant = commercantRepository.save(parentCommercant);
+
+        pdv pointVente = new pdv();
+        pointVente.setNomPDV("PDV du sous-commerçant");
+        pointVente.setCommercant(parentCommercant);
+        pointVente = pdvRepository.save(pointVente);
+
+        utilisateur subUser = new utilisateur();
+        subUser.setEmail("profile.pdv-scope.sub@test.lanacash.ma");
+        subUser.setRole(RoleUser.SOUS_COMMERCANT);
+        subUser.setActive(true);
+        subUser.setDateCreation(LocalDate.now());
+        utilisateurRepository.save(subUser);
+
+        sous_commercant sousCommercant = new sous_commercant();
+        sousCommercant.setUtilisateur(subUser);
+        pointVente.setSousCommercant(sousCommercant);
+        pdvRepository.save(pointVente);
+        sousCommercantRepository.save(sousCommercant);
+
+        Long resolved = merchantAccessService.resolveAuthenticatedPdvIdForSousCommercant("Bearer " + tokenFor(subUser));
+
+        assertThat(resolved).isEqualTo(pointVente.getIdPDV());
+    }
+
+    /**
+     * Reproduit le scenario du bug chatbot corrige : un commercant possede
+     * DEUX PDV, chacun avec son propre TPE — quand pdvId est fourni (cas
+     * sous-commerçant), le profil ne doit exposer QUE le PDV/TPE vise, pas
+     * les deux.
+     */
+    @Test
+    void profileScopedToPdvIdOnlyIncludesThatPdvAndItsTpe() {
+        utilisateur user = persistMerchantUser("profile.pdv-scope.multi@test.lanacash.ma");
+        commercant commercant = new commercant();
+        commercant.setUtilisateur(user);
+        commercant = commercantRepository.save(commercant);
+        Long commercantId = commercant.getIdCommercant();
+
+        pdv premierPdv = new pdv();
+        premierPdv.setNomPDV("PDV historique");
+        premierPdv.setVille("Casablanca");
+        premierPdv.setCommercant(commercant);
+        premierPdv = pdvRepository.save(premierPdv);
+
+        pdv deuxiemePdv = new pdv();
+        deuxiemePdv.setNomPDV("PDV du sous-commerçant");
+        deuxiemePdv.setVille("Rabat");
+        deuxiemePdv.setCommercant(commercant);
+        deuxiemePdv = pdvRepository.save(deuxiemePdv);
+
+        dossier_affiliation dossier = new dossier_affiliation();
+        dossier.setCommercant(commercant);
+        dossier.setStatus(StatusDossier.ACCEPTE);
+        dossier.setTypeAffiliation(TypeAffiliation.TPE);
+        dossier.setDateSoumission(LocalDate.now());
+        dossierAffiliationRepository.save(dossier);
+
+        when(switchMonetiqueClient.stockComplet()).thenReturn(List.of(
+            new SwitchMonetiqueClient.SwitchTpe(
+                "TPE-PDV-1", commercantId.toString(), premierPdv.getIdPDV().toString(),
+                "TPE", "4G", true, BigDecimal.ZERO, LocalDateTime.now()
+            ),
+            new SwitchMonetiqueClient.SwitchTpe(
+                "TPE-PDV-2", commercantId.toString(), deuxiemePdv.getIdPDV().toString(),
+                "TPE", "4G", true, BigDecimal.ZERO, LocalDateTime.now()
+            )
+        ));
+
+        ChatbotMerchantProfileResponse profile =
+            merchantAccessService.getMerchantProfileForChatbot(commercantId, deuxiemePdv.getIdPDV());
+
+        assertThat(profile.pdvs()).hasSize(1);
+        assertThat(profile.pdvs().get(0).nom()).isEqualTo("PDV du sous-commerçant");
+        assertThat(profile.tpes()).hasSize(1);
+        assertThat(profile.tpes().get(0).numeroSerie()).isEqualTo("TPE-PDV-2");
     }
 }

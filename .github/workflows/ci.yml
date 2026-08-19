@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    services:
+      # src/test/resources/application.properties pointe sur un vrai SQL
+      # Server (localhost:1433, db master5_test, sa/Caramel123!) — pas de H2
+      # en memoire ici, donc il faut le service en CI ou tous les tests
+      # d'integration @SpringBootTest echouent au demarrage du contexte.
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: "Caramel123!"
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P Caramel123! -C -Q 'SELECT 1' || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+      # sqlcmd est preinstalle sur les runners ubuntu-latest de GitHub
+      # (image runner officielle) — pas besoin de l'installer via apt.
+      - name: Créer la base de test
+        run: sqlcmd -S localhost -U sa -P 'Caramel123!' -C -Q "IF DB_ID('master5_test') IS NULL CREATE DATABASE master5_test"
+      - name: Build + tests
+        run: mvn -B test
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: test-reports
+          path: target/surefire-reports
+          retention-days: 14
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          tags: demo:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

@@ -8,6 +8,7 @@ import com.example.demo.entities.PM;
 import com.example.demo.entities.PP;
 import com.example.demo.entities.commercant;
 import com.example.demo.entities.dossier_affiliation;
+import com.example.demo.entities.pdv;
 import com.example.demo.enums.TypeAffiliation;
 import com.example.demo.enums.TypeCommercant;
 import com.example.demo.repositories.AERepository;
@@ -90,6 +91,89 @@ class GenerateurModeleContratAffiliationTest {
 
         assertThat(html).contains("LANA CASH");
         assertThat(html.toLowerCase()).contains("alaoui");
+    }
+
+    /**
+     * Extension sur un PDV DEJA EXISTANT : le contrat reste structurellement
+     * identique (memes clauses, meme mise en page), mais porte un bandeau
+     * explicite mentionnant le canal demande et le nom du point de vente —
+     * sans ca, ce document ressemble a un contrat d'affiliation initial
+     * plutot qu'a une extension sur un point de vente deja affilie.
+     */
+    @Test
+    void addsExtensionBannerForExtensionOnExistingPdv() {
+        commercant commercant = newCommercant(TypeCommercant.PERSONNE_PHYSIQUE, "Boutique Extension");
+        PP pp = new PP();
+        pp.setCommercant(commercant);
+        pp.setNom("Alaoui");
+        pp.setPrenom("Youssef");
+        pp.setCin("AB123456");
+        ppRepository.save(pp);
+
+        pdv pointVente = new pdv();
+        pointVente.setNomPDV("Boutique Historique Ain Sebaa");
+        pointVente.setCommercant(commercant);
+
+        dossier_affiliation dossier = newDossier(commercant, TypeAffiliation.SOFTPOS);
+        dossier.setOrigineCreation("NOUVEAU_PDV");
+        dossier.setRequestedPdvDejaExistant(true);
+        dossier.setRequestedPdv(pointVente);
+
+        String html = generateur.genererHtmlContrat(dossier, pointVente);
+
+        assertThat(html).contains("Demande d'extension");
+        assertThat(html).contains("SoftPOS");
+        assertThat(html).contains("Boutique Historique Ain Sebaa");
+    }
+
+    /**
+     * Symetrique : une extension sur un NOUVEAU point de vente n'a pas besoin
+     * du bandeau — le contrat est deja, de fait, celui d'un point de vente
+     * inedit (pas de risque de confusion avec l'affiliation initiale).
+     */
+    @Test
+    void doesNotAddExtensionBannerForExtensionOnNewPdv() {
+        commercant commercant = newCommercant(TypeCommercant.PERSONNE_PHYSIQUE, "Boutique Extension Nouveau PDV");
+        PP pp = new PP();
+        pp.setCommercant(commercant);
+        pp.setNom("Alaoui");
+        pp.setPrenom("Youssef");
+        pp.setCin("AB123456");
+        ppRepository.save(pp);
+
+        pdv pointVente = new pdv();
+        pointVente.setNomPDV("Nouvelle Boutique Rabat");
+        pointVente.setCommercant(commercant);
+
+        dossier_affiliation dossier = newDossier(commercant, TypeAffiliation.TPE);
+        dossier.setOrigineCreation("NOUVEAU_PDV");
+        dossier.setRequestedPdvDejaExistant(false);
+        dossier.setRequestedPdv(pointVente);
+
+        String html = generateur.genererHtmlContrat(dossier, pointVente);
+
+        assertThat(html).doesNotContain("Demande d'extension");
+    }
+
+    /**
+     * Le contrat d'affiliation INITIALE (pas une extension) ne doit jamais
+     * porter ce bandeau, meme si origineCreation n'est pas renseigne.
+     */
+    @Test
+    void doesNotAddExtensionBannerForInitialAffiliation() {
+        commercant commercant = newCommercant(TypeCommercant.PERSONNE_PHYSIQUE, "Boutique Initiale");
+        PP pp = new PP();
+        pp.setCommercant(commercant);
+        pp.setNom("Alaoui");
+        pp.setPrenom("Youssef");
+        pp.setCin("AB123456");
+        ppRepository.save(pp);
+
+        dossier_affiliation dossier = newDossier(commercant, TypeAffiliation.TPE);
+
+        String html = generateur.genererHtmlContrat(dossier);
+
+        assertThat(html).doesNotContain("Demande d'extension");
     }
 
     @Test

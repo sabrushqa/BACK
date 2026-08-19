@@ -185,6 +185,52 @@ class ChatbotProxyControllerTest {
     }
 
     @Test
+    void injectsMerchantPdvIdForSousCommercantIntoMessageBody() throws IOException {
+        String baseUrl = startFakeChatbot("/chat/message", 200, "{\"reply\":\"bonjour\"}");
+        when(merchantAccessService.resolveAuthenticatedCommercantId(AUTH_HEADER)).thenReturn(42L);
+        when(merchantAccessService.resolveAuthenticatedPdvIdForSousCommercant(AUTH_HEADER)).thenReturn(7L);
+        ChatbotProxyController controller = new ChatbotProxyController(baseUrl, "secret-token", merchantAccessService);
+
+        // Un sous-commerçant garde le merchant_id du commerçant PARENT (son
+        // identite), mais doit AUSSI porter merchant_pdv_id : sans ca, le
+        // profil recupere par le chatbot (ChatbotMerchantProfileController)
+        // couvre tout le commerçant parent au lieu du seul PDV du
+        // sous-commerçant.
+        controller.message(AUTH_HEADER, "{\"message\":\"salut\"}");
+
+        assertThat(lastRequestBody).contains("\"merchant_id\":\"42\"");
+        assertThat(lastRequestBody).contains("\"merchant_pdv_id\":\"7\"");
+    }
+
+    @Test
+    void doesNotInjectMerchantPdvIdForRegularCommercant() throws IOException {
+        String baseUrl = startFakeChatbot("/chat/message", 200, "{\"reply\":\"bonjour\"}");
+        when(merchantAccessService.resolveAuthenticatedCommercantId(AUTH_HEADER)).thenReturn(42L);
+        when(merchantAccessService.resolveAuthenticatedPdvIdForSousCommercant(AUTH_HEADER)).thenReturn(null);
+        ChatbotProxyController controller = new ChatbotProxyController(baseUrl, "secret-token", merchantAccessService);
+
+        controller.message(AUTH_HEADER, "{\"message\":\"salut\"}");
+
+        assertThat(lastRequestBody).doesNotContain("merchant_pdv_id");
+    }
+
+    @Test
+    void forwardsSessionPrefillWithMerchantPdvIdInjectedForSousCommercant() throws IOException {
+        String baseUrl = startFakeChatbot("/chat/session/prefill", 200, "{\"ok\":true}");
+        when(merchantAccessService.resolveAuthenticatedCommercantId(AUTH_HEADER)).thenReturn(42L);
+        when(merchantAccessService.resolveAuthenticatedPdvIdForSousCommercant(AUTH_HEADER)).thenReturn(7L);
+        ChatbotProxyController controller = new ChatbotProxyController(baseUrl, "secret-token", merchantAccessService);
+
+        MultiValueMap<String, String> queryParams = new LinkedMultiValueMap<>();
+        queryParams.add("session_id", "abc123");
+
+        var response = controller.prefill(AUTH_HEADER, queryParams);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        verify(merchantAccessService).resolveAuthenticatedPdvIdForSousCommercant(AUTH_HEADER);
+    }
+
+    @Test
     void gracefullyIgnoresMerchantResolutionFailure() throws IOException {
         String baseUrl = startFakeChatbot("/chat/message", 200, "{\"reply\":\"bonjour\"}");
         when(merchantAccessService.resolveAuthenticatedCommercantId(any()))

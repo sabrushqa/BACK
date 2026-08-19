@@ -264,13 +264,54 @@ public class MerchantAccessService {
     }
 
     /**
+     * Pendant de resolveAuthenticatedCommercantId, pour le meme appelant
+     * (ChatbotProxyController) : resout le PDV affecte au sous-commerçant
+     * authentifie, pour que le chatbot puisse scoper les PDV/TPE renvoyes par
+     * getMerchantProfileForChatbot a CE seul PDV plutot qu'a tout le
+     * commerçant parent (voir commentaire de resolveAuthenticatedCommercantId
+     * — "les PDV/TPE lui appartiennent [au parent], pas au sous-commerçant" —
+     * c'est vrai pour l'IDENTITE du commerçant, mais pas pour la VISIBILITE :
+     * un sous-commerçant ne doit voir/discuter que du TPE de son propre PDV,
+     * exactement comme son propre dashboard le fait deja via
+     * buildTpeItemsForSubMerchant). Retourne null pour un commerçant
+     * "normal" (pas de restriction a appliquer) ou un sous-commerçant
+     * e-commerce (pas de PDV, sous_commercant.commercant direct).
+     */
+    @Transactional(readOnly = true)
+    public Long resolveAuthenticatedPdvIdForSousCommercant(String authorizationHeader) {
+        utilisateur utilisateur;
+        try {
+            utilisateur = readAuthenticatedUser(authorizationHeader);
+        } catch (ResponseStatusException ex) {
+            return null;
+        }
+
+        if (utilisateur.getRole() != RoleUser.SOUS_COMMERCANT) {
+            return null;
+        }
+
+        return pdvRepository.findTop8BySousCommercant_Utilisateur_IdOrderByIdPDVDesc(utilisateur.getId())
+            .stream()
+            .findFirst()
+            .map(pdv::getIdPDV)
+            .orElse(null);
+    }
+
+    /**
      * Profil commerçant expose au chatbot (endpoint interne). Reutilise la
      * meme fusion TPE local+Oracle que buildSessionResponse pour que le
      * chatbot voie exactement les memes TPE que le commerçant dans son
      * propre espace — pas une vue partielle/differente.
+     *
+     * pdvId (optionnel) : restreint PDV et TPE renvoyes a CE seul point de
+     * vente — utilise quand l'appelant est un sous-commerçant (voir
+     * resolveAuthenticatedPdvIdForSousCommercant / ChatbotProxyController) —
+     * sans ca le chatbot voyait TOUS les PDV/TPE du commerçant parent pour un
+     * sous-commerçant, contrairement a son propre dashboard qui, lui,
+     * filtrait deja correctement (buildSubMerchantSessionResponse).
      */
     @Transactional(readOnly = true)
-    public ChatbotMerchantProfileResponse getMerchantProfileForChatbot(Long commercantId) {
+    public ChatbotMerchantProfileResponse getMerchantProfileForChatbot(Long commercantId, Long pdvId) {
         commercant commercant = commercantRepository.findById(commercantId).orElse(null);
         if (commercant == null) {
             return null;
@@ -284,6 +325,12 @@ public class MerchantAccessService {
 
         List<pdv> pdvs = pdvRepository.findByCommercant_IdCommercantOrderByIdPDVAsc(commercantId);
         List<tpe> localTpes = tpeRepository.findByCommercantIdOrderByIdDesc(commercantId);
+        if (pdvId != null) {
+            pdvs = pdvs.stream().filter(p -> pdvId.equals(p.getIdPDV())).toList();
+            localTpes = localTpes.stream()
+                .filter(t -> t.getPdv() != null && pdvId.equals(t.getPdv().getIdPDV()))
+                .toList();
+        }
 
         List<ChatbotMerchantProfileResponse.PdvItem> pdvItems = pdvs.stream()
             .map(p -> new ChatbotMerchantProfileResponse.PdvItem(
@@ -301,6 +348,7 @@ public class MerchantAccessService {
                 new java.util.concurrent.atomic.AtomicBoolean(false)
             )
             .stream()
+            .filter(item -> pdvId == null || pdvId.equals(item.pdvId()))
             .map(item -> new ChatbotMerchantProfileResponse.TpeItem(
                 item.numeroSerie(),
                 item.modele(),
@@ -528,6 +576,19 @@ public class MerchantAccessService {
             new java.util.concurrent.atomic.AtomicBoolean(false);
         List<MerchantSessionResponse.TpeItem> tpeItems =
             buildTpeItemsForSubMerchant(tpes, pdvs, switchIndisponible);
+        // Fusionne l'historique local (auto-provisionne NOUVEAU_PDV) et
+        // l'historique reel cote switch-monetique-service (Oracle) — sans
+        // cette fusion, "transactions" (table locale) restait quasiment
+        // toujours vide et tout le dashboard du sous-commerçant affichait 0
+        // partout malgre un historique reel sur son TPE (meme bug deja
+        // corrige pour tpeItems ci-dessus, jamais reporte sur les
+        // transactions).
+        List<MerchantSessionResponse.TransactionItem> transactionItems = buildTransactionItemsForSubMerchant(
+            transactions,
+            parentCommercant == null ? null : parentCommercant.getIdCommercant(),
+            pdvs,
+            switchIndisponible
+        );
 
         return new MerchantSessionResponse(
             utilisateur.getId(),
@@ -550,9 +611,13 @@ public class MerchantAccessService {
             null,
             tokenExpiration,
             new MerchantSessionResponse.Summary(
-                transactionsRepository.countByTpe_Pdv_SousCommercant_Utilisateur_Id(utilisateur.getId()),
+                // transactionItems/tpeItems ci-dessus sont deja la fusion
+                // local+Oracle — les compter directement (au lieu de
+                // requeter a nouveau la seule table locale, comme avant)
+                // evite exactement le meme sous-comptage a 0.
+                transactionItems.size(),
                 pdvRepository.countBySousCommercant_Utilisateur_Id(utilisateur.getId()),
-                tpeRepository.countByPdv_SousCommercant_Utilisateur_Id(utilisateur.getId()),
+                tpeItems.size(),
                 0
             ),
             switchIndisponible.get(),
@@ -576,7 +641,7 @@ public class MerchantAccessService {
                 )
                 .toList(),
             tpeItems,
-            transactions.stream().map(this::toLocalTransactionItem).toList(),
+            transactionItems,
             true,
             true,
             true
@@ -814,6 +879,26 @@ public class MerchantAccessService {
         List<pdv> visiblePdvs,
         java.util.concurrent.atomic.AtomicBoolean switchIndisponible
     ) {
+        return mapOracleTransactionItems(oracleTransactions, visiblePdvs, false, switchIndisponible);
+    }
+
+    /**
+     * restrictToVisiblePdvs=true : necessaire pour un sous-commerçant, qui ne
+     * doit voir que les transactions des TPE de SON PDV, pas tout
+     * l'historique Oracle du commercant parent (celui-ci est interroge par
+     * commercantId cote switch-monetique-service, qui n'a pas de notion de
+     * PDV — voir SwitchMonetiqueClient::transactions). Sans cette variante,
+     * une transaction dont le TPE n'appartient a aucun des visiblePdvs
+     * apparaissait quand meme (avec un PDV vide) au lieu d'etre exclue —
+     * comportement voulu pour un commercant complet (visiblePdvs = TOUS ses
+     * PDV, rien a exclure), mais pas pour un sous-commerçant.
+     */
+    private List<MerchantSessionResponse.TransactionItem> mapOracleTransactionItems(
+        List<SwitchMonetiqueClient.SwitchTransaction> oracleTransactions,
+        List<pdv> visiblePdvs,
+        boolean restrictToVisiblePdvs,
+        java.util.concurrent.atomic.AtomicBoolean switchIndisponible
+    ) {
         Map<String, pdv> pdvById = visiblePdvs.stream()
             .collect(Collectors.toMap(p -> p.getIdPDV().toString(), p -> p, (a, b) -> a));
         // Une transaction Oracle ne porte que l'id du TPE (ex: "TPE-000003"), pas
@@ -827,6 +912,11 @@ public class MerchantAccessService {
                 (a, b) -> a
             ));
         return oracleTransactions.stream()
+            .filter(transaction -> {
+                if (!restrictToVisiblePdvs) return true;
+                String idPdv = transaction.idTpe() == null ? null : pdvIdByOracleTpeId.get(transaction.idTpe());
+                return idPdv != null && pdvById.containsKey(idPdv);
+            })
             .map(transaction -> {
                 String idPdv = transaction.idTpe() == null ? null : pdvIdByOracleTpeId.get(transaction.idTpe());
                 pdv matchedPdv = idPdv == null ? null : pdvById.get(idPdv);
@@ -864,6 +954,34 @@ public class MerchantAccessService {
         items.addAll(mapOracleTransactionItems(
             fetchOracleTransactionsSafely(commercantId, switchIndisponible),
             pdvs,
+            switchIndisponible
+        ));
+        items.sort(TRANSACTION_DATE_DESC);
+        return items;
+    }
+
+    /**
+     * Meme fusion pour un sous-commerçant, mais scope aux TPE des PDV
+     * visibles (pas par commercant_id) — meme principe que
+     * buildTpeItemsForSubMerchant. Sans elle, buildSubMerchantSessionResponse
+     * n'utilisait que la table locale "transactions" (qui ne couvre que
+     * l'auto-provisionnement NOUVEAU_PDV, quasiment toujours vide) : un
+     * sous-commerçant avec un TPE reellement affecte et un historique reel
+     * cote switch-monetique-service (Oracle) voyait quand meme "0" partout
+     * dans son dashboard (graphiques Transactions par mois/PDV/TPE).
+     */
+    private List<MerchantSessionResponse.TransactionItem> buildTransactionItemsForSubMerchant(
+        List<transactions> localTransactions,
+        Long parentCommercantId,
+        List<pdv> visiblePdvs,
+        java.util.concurrent.atomic.AtomicBoolean switchIndisponible
+    ) {
+        List<MerchantSessionResponse.TransactionItem> items =
+            new ArrayList<>(localTransactions.stream().map(this::toLocalTransactionItem).toList());
+        items.addAll(mapOracleTransactionItems(
+            fetchOracleTransactionsSafely(parentCommercantId, switchIndisponible),
+            visiblePdvs,
+            true,
             switchIndisponible
         ));
         items.sort(TRANSACTION_DATE_DESC);

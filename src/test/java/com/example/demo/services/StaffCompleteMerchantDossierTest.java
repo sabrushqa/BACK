@@ -4,10 +4,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.example.demo.dto.AffiliationActivationRequest;
+import com.example.demo.dto.MerchantPdvProductRequest;
 import com.example.demo.entities.back_office;
 import com.example.demo.entities.commerciale;
 import com.example.demo.entities.commercant;
 import com.example.demo.entities.dossier_affiliation;
+import com.example.demo.entities.pdv;
 import com.example.demo.entities.utilisateur;
 import com.example.demo.enums.RoleUser;
 import com.example.demo.enums.StatusDossier;
@@ -17,6 +19,7 @@ import com.example.demo.repositories.CommercialeRepository;
 import com.example.demo.repositories.CommercantRepository;
 import com.example.demo.repositories.DossierAffiliationRepository;
 import com.example.demo.repositories.NotificationsRepository;
+import com.example.demo.repositories.PdvRepository;
 import com.example.demo.repositories.UtilisateurRepository;
 import com.example.demo.security.TestJwtSupport;
 import java.time.LocalDate;
@@ -58,6 +61,12 @@ class StaffCompleteMerchantDossierTest {
 
     @Autowired
     private NotificationsRepository notificationsRepository;
+
+    @Autowired
+    private PdvRepository pdvRepository;
+
+    @Autowired
+    private MerchantWorkspaceManagementService merchantWorkspaceManagementService;
 
     private utilisateur persistUser(String email, RoleUser role) {
         utilisateur user = new utilisateur();
@@ -272,6 +281,129 @@ class StaffCompleteMerchantDossierTest {
         assertThat(reloaded.getStatus()).isEqualTo(StatusDossier.EN_ATTENTE_VALIDATION_BOA);
         assertThat(reloaded.getCommissionLocaleQrSoftpos()).isEqualTo("1%");
         assertThat(reloaded.getConditionsQrSoftpos()).isEqualTo("Standard");
+    }
+
+    /**
+     * Extension sur un PDV DEJA EXISTANT : pas de nouvelle visite/qualification
+     * necessaire pour ce meme point de vente — le compte-rendu commercial du
+     * dossier principal (deja genere) doit etre reutilise tel quel, pas
+     * regenere.
+     */
+    @Test
+    void reusesParentCommercialReportForExtensionOnExistingPdv() {
+        utilisateur commercialUser = persistUser("commercial.ext-crc@test.lanacash.ma", RoleUser.COMMERCIAL);
+        commerciale commerciale = new commerciale();
+        commerciale.setUtilisateur(commercialUser);
+        commerciale = commercialeRepository.save(commerciale);
+
+        utilisateur merchantUser = persistUser("commercant.ext-crc@test.lanacash.ma", RoleUser.COMMERCANT);
+        commercant commercant = new commercant();
+        commercant.setUtilisateur(merchantUser);
+        commercant = commercantRepository.save(commercant);
+
+        pdv pointVente = new pdv();
+        pointVente.setNomPDV("Boutique historique CRC");
+        pointVente.setCommercant(commercant);
+        pointVente.setStatut("ACTIF");
+        pointVente = pdvRepository.save(pointVente);
+
+        // Dossier principal deja ACCEPTE, avec un compte-rendu deja genere
+        // (simule le resultat d'un completeMerchantDossier anterieur).
+        dossier_affiliation principalDossier = new dossier_affiliation();
+        principalDossier.setCommercant(commercant);
+        principalDossier.setStatus(StatusDossier.ACCEPTE);
+        principalDossier.setTypeAffiliation(TypeAffiliation.TPE);
+        principalDossier.setCommerciale(commerciale);
+        principalDossier.setDateSoumission(LocalDate.now());
+        principalDossier.setCommercialReportPath("/uploads/contracts/dossier-1/compte-rendu-commercial-1.pdf");
+        principalDossier.setCommercialReportFileName("compte-rendu-commercial-1.pdf");
+        principalDossier.setCommercialReportGeneratedAt(LocalDate.now().minusMonths(2));
+        dossierAffiliationRepository.save(principalDossier);
+
+        merchantWorkspaceManagementService.requestNewPdvProduct(
+            "Bearer " + tokenFor(merchantUser),
+            new MerchantPdvProductRequest(
+                null, null, null, null, null, null, null,
+                "TPE", "1", "STANDARD", "GPRS", "ACHAT", null, null, null, null, null,
+                null, null,
+                pointVente.getIdPDV()
+            )
+        );
+
+        dossier_affiliation extensionDossier = dossierAffiliationRepository
+            .findAllByCommercant_IdCommercantOrderByDateSoumissionDescIdDossierDesc(commercant.getIdCommercant())
+            .stream()
+            .filter(d -> "NOUVEAU_PDV".equals(d.getOrigineCreation()))
+            .findFirst()
+            .orElseThrow(() -> new AssertionError("Dossier d'extension introuvable"));
+        assertThat(extensionDossier.getRequestedPdvDejaExistant()).isTrue();
+
+        staffAffiliationManagementService.completeMerchantDossier(
+            "Bearer " + tokenFor(commercialUser),
+            extensionDossier.getIdDossier(),
+            tpeActivationRequest()
+        );
+
+        dossier_affiliation reloaded = dossierAffiliationRepository.findById(extensionDossier.getIdDossier()).orElseThrow();
+        assertThat(reloaded.getStatus()).isEqualTo(StatusDossier.EN_ATTENTE_VALIDATION_BOA);
+        assertThat(reloaded.getCommercialReportPath()).isEqualTo(principalDossier.getCommercialReportPath());
+        assertThat(reloaded.getCommercialReportFileName()).isEqualTo(principalDossier.getCommercialReportFileName());
+        assertThat(reloaded.getCommercialReportGeneratedAt()).isEqualTo(principalDossier.getCommercialReportGeneratedAt());
+    }
+
+    /**
+     * Symetrique : une extension sur un NOUVEAU point de vente (pas
+     * existingPdvId) garde son propre compte-rendu, genere normalement —
+     * seule l'extension sur un PDV deja existant reutilise celui du parent.
+     */
+    @Test
+    void generatesOwnCommercialReportForExtensionOnNewPdv() {
+        utilisateur commercialUser = persistUser("commercial.ext-crc-new@test.lanacash.ma", RoleUser.COMMERCIAL);
+        commerciale commerciale = new commerciale();
+        commerciale.setUtilisateur(commercialUser);
+        commerciale = commercialeRepository.save(commerciale);
+
+        utilisateur merchantUser = persistUser("commercant.ext-crc-new@test.lanacash.ma", RoleUser.COMMERCANT);
+        commercant commercant = new commercant();
+        commercant.setUtilisateur(merchantUser);
+        commercant = commercantRepository.save(commercant);
+
+        dossier_affiliation principalDossier = new dossier_affiliation();
+        principalDossier.setCommercant(commercant);
+        principalDossier.setStatus(StatusDossier.ACCEPTE);
+        principalDossier.setTypeAffiliation(TypeAffiliation.TPE);
+        principalDossier.setCommerciale(commerciale);
+        principalDossier.setDateSoumission(LocalDate.now());
+        principalDossier.setCommercialReportPath("/uploads/contracts/dossier-2/compte-rendu-commercial-2.pdf");
+        dossierAffiliationRepository.save(principalDossier);
+
+        merchantWorkspaceManagementService.requestNewPdvProduct(
+            "Bearer " + tokenFor(merchantUser),
+            new MerchantPdvProductRequest(
+                "Nouvelle boutique", "45 avenue Test", "Rabat", null, null, "0600000001", null,
+                "TPE", "1", "STANDARD", "GPRS", "ACHAT", null, null, null, null, null,
+                null, null,
+                null
+            )
+        );
+
+        dossier_affiliation extensionDossier = dossierAffiliationRepository
+            .findAllByCommercant_IdCommercantOrderByDateSoumissionDescIdDossierDesc(commercant.getIdCommercant())
+            .stream()
+            .filter(d -> "NOUVEAU_PDV".equals(d.getOrigineCreation()))
+            .findFirst()
+            .orElseThrow(() -> new AssertionError("Dossier d'extension introuvable"));
+        assertThat(extensionDossier.getRequestedPdvDejaExistant()).isFalse();
+
+        staffAffiliationManagementService.completeMerchantDossier(
+            "Bearer " + tokenFor(commercialUser),
+            extensionDossier.getIdDossier(),
+            tpeActivationRequest()
+        );
+
+        dossier_affiliation reloaded = dossierAffiliationRepository.findById(extensionDossier.getIdDossier()).orElseThrow();
+        assertThat(reloaded.getCommercialReportPath()).isNotBlank();
+        assertThat(reloaded.getCommercialReportPath()).isNotEqualTo(principalDossier.getCommercialReportPath());
     }
 
     @Test

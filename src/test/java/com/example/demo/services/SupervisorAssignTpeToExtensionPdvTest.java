@@ -170,4 +170,97 @@ class SupervisorAssignTpeToExtensionPdvTest {
             any(), any(), any()
         );
     }
+
+    /**
+     * Meme scenario que ci-dessus, mais le PREMIER point de vente possede
+     * DEJA un TPE affecte cote Oracle — reproduit le bug reel constate
+     * manuellement (compte "soraya") ou validateTpeAssignment() comptait TOUS
+     * les TPE du commercant (tous PDV confondus) plutot que ceux du SEUL PDV
+     * vise par cette extension, bloquant a tort l'affectation avec "Le nombre
+     * de references affectees au commercant atteint deja le nombre demande".
+     */
+    @Test
+    void assigningTpeToExtensionDossierIgnoresTpesAlreadyAssignedOnAnotherPdvOfTheSameMerchant() {
+        utilisateur merchantUser = persistUser("commercant.ext-pdv-2@test.lanacash.ma", RoleUser.COMMERCANT);
+        commercant commercant = new commercant();
+        commercant.setUtilisateur(merchantUser);
+        commercant = commercantRepository.save(commercant);
+
+        pdv premierPdv = new pdv();
+        premierPdv.setNomPDV("Boutique historique");
+        premierPdv.setCommercant(commercant);
+        premierPdv.setStatut("ACTIF");
+        pdvRepository.save(premierPdv);
+
+        dossier_affiliation principalDossier = new dossier_affiliation();
+        principalDossier.setCommercant(commercant);
+        principalDossier.setStatus(StatusDossier.ACCEPTE);
+        principalDossier.setTypeAffiliation(TypeAffiliation.TPE);
+        principalDossier.setDateSoumission(LocalDate.now());
+        dossierAffiliationRepository.save(principalDossier);
+
+        merchantWorkspaceManagementService.requestNewPdvProduct(
+            "Bearer " + tokenFor(merchantUser),
+            new MerchantPdvProductRequest(
+                "Nouvelle boutique", "45 avenue Test", "Rabat", null, null, "0600000001", null,
+                "TPE", "1", "STANDARD", "GPRS", "ACHAT", null, null, null, null, null,
+                34.0209, -6.8416,
+                null
+            )
+        );
+
+        List<dossier_affiliation> dossiers = dossierAffiliationRepository
+            .findAllByCommercant_IdCommercantOrderByDateSoumissionDescIdDossierDesc(commercant.getIdCommercant());
+        dossier_affiliation extensionDossier = dossiers.stream()
+            .filter(d -> "NOUVEAU_PDV".equals(d.getOrigineCreation()))
+            .findFirst()
+            .orElseThrow(() -> new AssertionError("Dossier d'extension introuvable"));
+
+        extensionDossier.setStatus(StatusDossier.ACCEPTE);
+        dossierAffiliationRepository.save(extensionDossier);
+
+        utilisateur backOfficeUser = persistUser("boa.ext-pdv-2@test.lanacash.ma", RoleUser.BACK_OFFICE);
+        back_office backOffice = new back_office();
+        backOffice.setUtilisateur(backOfficeUser);
+        backOfficeRepository.save(backOffice);
+
+        String tpeId = "TPE-EXT-PDV-TEST-2";
+        when(switchMonetiqueClient.parId(tpeId)).thenReturn(Optional.of(
+            new SwitchMonetiqueClient.SwitchTpe(
+                tpeId, null, null, "TPE", "4G", true, BigDecimal.ZERO, LocalDateTime.now()
+            )
+        ));
+        // Stock Oracle : un TPE deja affecte au MEME commercant mais sur le
+        // PREMIER PDV (historique) — pas sur le PDV vise par l'extension.
+        when(switchMonetiqueClient.stockComplet()).thenReturn(List.of(
+            new SwitchMonetiqueClient.SwitchTpe(
+                "TPE-DEJA-AFFECTE", commercant.getIdCommercant().toString(),
+                premierPdv.getIdPDV().toString(),
+                "TPE", "4G", true, BigDecimal.ZERO, LocalDateTime.now()
+            )
+        ));
+        when(switchMonetiqueClient.affecter(any(), any(), any(), any(), any(), any())).thenReturn(
+            new SwitchMonetiqueClient.SwitchTpe(
+                tpeId, commercant.getIdCommercant().toString(),
+                extensionDossier.getRequestedPdv().getIdPDV().toString(),
+                "TPE", "4G", true, BigDecimal.ZERO, LocalDateTime.now()
+            )
+        );
+
+        // Ne doit PAS lever "Le nombre de references affectees au commercant
+        // atteint deja le nombre demande" : le TPE deja affecte est sur un
+        // AUTRE PDV, il ne doit pas compter pour CETTE extension.
+        supervisorManagementService.assignTpeToCommercant(
+            "Bearer " + tokenFor(backOfficeUser),
+            tpeId,
+            new SupervisorTpeAssignRequest(extensionDossier.getIdDossier())
+        );
+
+        verify(switchMonetiqueClient).affecter(
+            eq(tpeId),
+            eq(commercant.getIdCommercant().toString()),
+            eq(extensionDossier.getRequestedPdv().getIdPDV().toString()),
+            any(), any(), any()
+        );
+    }
 }

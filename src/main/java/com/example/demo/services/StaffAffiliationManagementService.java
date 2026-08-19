@@ -455,11 +455,28 @@ public class StaffAffiliationManagementService {
         dossier.setSignedContractFileName(null);
         dossier.setSignedContractUploadedAt(null);
 
-        ServiceDocumentContratAffiliation.CompteRenduCommercialGenere compteRenduCommercial =
-            serviceDocumentContratAffiliation.genererCompteRenduCommercial(dossier);
-        dossier.setCommercialReportPath(compteRenduCommercial.cheminStocke());
-        dossier.setCommercialReportFileName(compteRenduCommercial.nomFichier());
-        dossier.setCommercialReportGeneratedAt(compteRenduCommercial.dateGeneration());
+        // Extension sur un PDV DEJA EXISTANT : le point de vente a deja ete
+        // visite/qualifie lors de l'affiliation principale — regenerer un
+        // compte-rendu commercial (visite, qualification, MCC...) pour ce
+        // meme PDV serait redondant. On reutilise directement le
+        // compte-rendu du dossier principal ACCEPTE (meme fichier, pas de
+        // nouvelle generation) plutot que d'en produire un nouveau vide/
+        // redondant. Une extension sur un NOUVEAU PDV, elle, garde son
+        // propre compte-rendu (nouveau lieu, nouvelle visite).
+        boolean reuseParentCommercialReport = newPdvRequest && Boolean.TRUE.equals(dossier.getRequestedPdvDejaExistant());
+        if (reuseParentCommercialReport) {
+            findAcceptedPrincipalDossier(dossier.getCommercant()).ifPresent(principal -> {
+                dossier.setCommercialReportPath(principal.getCommercialReportPath());
+                dossier.setCommercialReportFileName(principal.getCommercialReportFileName());
+                dossier.setCommercialReportGeneratedAt(principal.getCommercialReportGeneratedAt());
+            });
+        } else {
+            ServiceDocumentContratAffiliation.CompteRenduCommercialGenere compteRenduCommercial =
+                serviceDocumentContratAffiliation.genererCompteRenduCommercial(dossier);
+            dossier.setCommercialReportPath(compteRenduCommercial.cheminStocke());
+            dossier.setCommercialReportFileName(compteRenduCommercial.nomFichier());
+            dossier.setCommercialReportGeneratedAt(compteRenduCommercial.dateGeneration());
+        }
 
         dossier.setStatus(StatusDossier.EN_ATTENTE_VALIDATION_BOA);
         if (isCommercialDirectDossier(dossier)) {

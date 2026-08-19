@@ -7,14 +7,18 @@ import com.example.demo.dto.ReclamationResponse;
 import com.example.demo.entities.back_office;
 import com.example.demo.entities.commercant;
 import com.example.demo.entities.dossier_affiliation;
+import com.example.demo.entities.pdv;
 import com.example.demo.entities.Reclamation;
+import com.example.demo.entities.sous_commercant;
 import com.example.demo.entities.tpe;
 import com.example.demo.entities.utilisateur;
 import com.example.demo.enums.RoleUser;
 import com.example.demo.repositories.BackOfficeRepository;
 import com.example.demo.repositories.CommercantRepository;
 import com.example.demo.repositories.DossierAffiliationRepository;
+import com.example.demo.repositories.PdvRepository;
 import com.example.demo.repositories.ReclamationRepository;
+import com.example.demo.repositories.SousCommercantRepository;
 import com.example.demo.repositories.TpeRepository;
 import com.example.demo.repositories.UtilisateurRepository;
 import java.time.LocalDate;
@@ -36,6 +40,8 @@ public class ReclamationService {
     private final UtilisateurRepository utilisateurRepository;
     private final BackOfficeRepository  backOfficeRepository;
     private final DossierAffiliationRepository dossierAffiliationRepository;
+    private final SousCommercantRepository sousCommercantRepository;
+    private final PdvRepository         pdvRepository;
     private final JwtService            jwtService;
     private final ReclamationPdfService reclamationPdfService;
 
@@ -46,6 +52,8 @@ public class ReclamationService {
         UtilisateurRepository utilisateurRepository,
         BackOfficeRepository  backOfficeRepository,
         DossierAffiliationRepository dossierAffiliationRepository,
+        SousCommercantRepository sousCommercantRepository,
+        PdvRepository         pdvRepository,
         JwtService            jwtService,
         ReclamationPdfService reclamationPdfService
     ) {
@@ -55,6 +63,8 @@ public class ReclamationService {
         this.utilisateurRepository = utilisateurRepository;
         this.backOfficeRepository  = backOfficeRepository;
         this.dossierAffiliationRepository = dossierAffiliationRepository;
+        this.sousCommercantRepository = sousCommercantRepository;
+        this.pdvRepository         = pdvRepository;
         this.jwtService            = jwtService;
         this.reclamationPdfService = reclamationPdfService;
     }
@@ -117,7 +127,21 @@ public class ReclamationService {
     }
 
     public List<ReclamationResponse> getMyReclamations(String authHeader) {
-        commercant merchant = resolveCommercant(authHeader);
+        utilisateur user = resolveAuthenticatedUser(authHeader);
+        // Un sous-commerçant ne doit voir que les reclamations liees a un TPE
+        // de SON PDV, pas tout l'historique du commercant parent (meme
+        // principe que MerchantAccessService::buildSubMerchantSessionResponse
+        // pour les transactions/TPE) — sans cette distinction, resolveCommercant
+        // ci-dessous remonterait au parent et exposerait les reclamations de
+        // TOUS les PDV du commercant, y compris ceux d'autres sous-commerçants.
+        if (user.getRole() == RoleUser.SOUS_COMMERCANT) {
+            return reclamationRepository
+                .findByTpe_Pdv_SousCommercant_Utilisateur_IdOrderByDateCreationDesc(user.getId())
+                .stream()
+                .map(this::toResponse)
+                .toList();
+        }
+        commercant merchant = resolveCommercantFor(user);
         return reclamationRepository
             .findByCommercant_IdCommercantOrderByDateCreationDesc(merchant.getIdCommercant())
             .stream()
@@ -342,9 +366,40 @@ public class ReclamationService {
     // ── helpers ──────────────────────────────────────────────────────────────
 
     private commercant resolveCommercant(String authHeader) {
-        utilisateur user = resolveAuthenticatedUser(authHeader);
+        return resolveCommercantFor(resolveAuthenticatedUser(authHeader));
+    }
+
+    /**
+     * Un sous-commerçant n'a pas de ligne "commercant" a lui — la reclamation
+     * doit malgre tout etre rattachee au commercant PARENT (c'est lui qui est
+     * juridiquement affilie, meme principe que MerchantAccessService::
+     * resolveAuthenticatedCommercantId) : sans cette resolution, createReclamation
+     * echouait avec 403 "Compte commerçant requis." pour tout sous-commerçant
+     * dont le ticket chatbot tentait de se sauvegarder.
+     */
+    private commercant resolveCommercantFor(utilisateur user) {
+        if (user.getRole() == RoleUser.SOUS_COMMERCANT) {
+            commercant parent = sousCommercantRepository.findByUtilisateur_Id(user.getId())
+                .map(sous_commercant::getCommercant)
+                .orElse(null);
+            if (parent == null) {
+                parent = resolveParentViaPdv(user.getId());
+            }
+            if (parent == null) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Compte commerçant requis.");
+            }
+            return parent;
+        }
         return commercantRepository.findByUtilisateur_Id(user.getId())
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "Compte commerçant requis."));
+    }
+
+    private commercant resolveParentViaPdv(Long utilisateurId) {
+        return pdvRepository.findTop8BySousCommercant_Utilisateur_IdOrderByIdPDVDesc(utilisateurId)
+            .stream()
+            .findFirst()
+            .map(pdv::getCommercant)
+            .orElse(null);
     }
 
     private void requireReclamationPermission(utilisateur authenticatedUser) {
